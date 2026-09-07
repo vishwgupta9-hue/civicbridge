@@ -12,13 +12,60 @@ import { errorHandler } from "./middleware/error.middleware.js";
 const app: Express = express();
 
 // Security and utility middleware
-app.use(helmet());
 app.use(
-  cors({
-    origin: config.frontendUrl,
-    credentials: true,
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
+
+// Determine allowed origins dynamically for local dev, Vercel deployments, and configured FRONTEND_URL
+const isOriginAllowed = (origin: string | undefined): boolean => {
+  if (!origin) return true; // Non-browser / health-check / mobile clients
+
+  // Local development
+  if (
+    origin.startsWith("http://localhost:") ||
+    origin.startsWith("http://127.0.0.1:")
+  ) {
+    return true;
+  }
+
+  // Any Vercel deployment (production, preview, branch)
+  if (
+    origin.endsWith(".vercel.app") ||
+    /^https:\/\/.*\.vercel\.app$/.test(origin)
+  ) {
+    return true;
+  }
+
+  // Explicitly configured FRONTEND_URL (supports comma-separated list)
+  const configured = config.frontendUrl
+    .split(",")
+    .map((u) => u.trim())
+    .filter(Boolean);
+
+  if (configured.includes(origin) || configured.includes("*")) {
+    return true;
+  }
+
+  return false;
+};
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    if (isOriginAllowed(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
