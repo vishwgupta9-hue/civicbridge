@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-neutral-50 text-neutral-900;
+  }
+
+  /* Guaranteed touch target on mobile */
+  button, 
+  [role="button"],
+  input, 
+  select, 
+  textarea {
+    @apply min-h-[44px];
+  }
+}
+
+@layer components {
+  /* CivicBridge Badge Utility Classes */
+  .badge-priority-high {
+    @apply bg-red-100 text-red-800 border border-red-300 font-semibold px-2.5 py-1 rounded-full text-xs;
+  }
+  .badge-priority-medium {
+    @apply bg-amber-100 text-amber-800 border border-amber-300 font-semibold px-2.5 py-1 rounded-full text-xs;
+  }
+  .badge-priority-low {
+    @apply bg-slate-100 text-slate-700 border border-slate-300 font-semibold px-2.5 py-1 rounded-full text-xs;
+  }
+
+  .badge-trust-verified {
+    @apply bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold px-2.5 py-1 rounded-full text-xs inline-flex items-center gap-1;
+  }
+  .badge-trust-screened {
+    @apply bg-sky-100 text-sky-800 border border-sky-300 font-semibold px-2.5 py-1 rounded-full text-xs inline-flex items-center gap-1;
+  }
+  .badge-trust-declined {
+    @apply bg-neutral-100 text-neutral-600 border border-neutral-300 font-medium px-2.5 py-1 rounded-full text-xs inline-flex items-center gap-1;
+  }
+}

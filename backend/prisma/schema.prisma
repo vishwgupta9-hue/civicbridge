@@ -1,0 +1,450 @@
+// CivicBridge — Prisma Schema
+// SIH PS 26043 — Community Problem-Solving Platform for Jharkhand
+// Version: 2.1 (Corrected Schema — Pre-Migration)
+// Database: PostgreSQL 15+ with pgvector extension
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+/// User roles in the system. Five authenticated roles only.
+enum Role {
+  CITIZEN
+  ADMIN
+  UNIVERSITY
+  INDUSTRY
+  STARTUP
+}
+
+/// Institutional entity type. Separate from Role to avoid misuse of the full
+/// Role enum (CITIZEN and ADMIN are not valid Organization types).
+enum OrganizationType {
+  UNIVERSITY
+  INDUSTRY
+  STARTUP
+}
+
+/// Exactly 3 priority tiers derived from a single priority score (0.0 – 100.0).
+/// Formula: (Severity×0.25) + (AffectedPeople×0.25) + (Frequency×0.15) + (Evidence×0.15) + (Urgency×0.20)
+/// All five factors are normalized to 0–100 before applying weights.
+enum PriorityTier {
+  LOW    // priorityScore 0.0 – 39.9
+  MEDIUM // priorityScore 40.0 – 69.9
+  HIGH   // priorityScore 70.0 – 100.0
+}
+
+/// Parallel government trust signal. NOT a visibility or participation gate.
+/// All problems with filterStatus = PASSED are visible to institutions
+/// regardless of their verificationStatus.
+enum VerificationStatus {
+  AI_SCREENED         // Default upon passing AI relevance filter
+  GOVERNMENT_VERIFIED // Government reviewed and confirmed
+  DECLINED_BY_GOVT    // Government reviewed but declined (problem remains active)
+}
+
+/// Problem-solving lifecycle (independent of VerificationStatus and PriorityTier).
+/// Child statuses (Proposal, BusinessConcept, Collaboration) do NOT automatically
+/// promote or demote this status.
+enum ProblemStatus {
+  OPEN        // Live in Problem Bank; institutions can act on it
+  IN_PROGRESS // Active student project or startup venture underway
+  RESOLVED    // Completed solution delivered and confirmed
+  CLOSED      // Archived
+}
+
+/// AI relevance screening result for a submitted problem.
+/// PENDING is the safe default: a problem is NOT visible to institutions until
+/// the AI pipeline explicitly sets this to PASSED.
+enum FilterStatus {
+  PENDING  // Initial state: AI screening not yet completed — problem NOT visible
+  PASSED   // AI screening passed — problem enters Problem Bank and is visible
+  REJECTED // AI screening failed — problem not visible in Problem Bank
+  FLAGGED  // Requires manual admin review before entering Problem Bank
+}
+
+/// Type of institutional support offered by industry to a startup/problem.
+/// NOTE: FUNDING is explicitly excluded per product decision.
+enum SupportType {
+  MENTORSHIP       // Expertise and guidance
+  TECHNICAL        // Technical resources, tools, infrastructure
+  PROTOTYPING      // Lab access, manufacturing, testing
+  GENERAL_INTEREST // Expressing broad interest without specific commitment
+}
+
+/// Stages in a startup's venture journey on a claimed problem.
+enum VentureStage {
+  PROBLEM_CLAIMED   // Startup has claimed / expressed interest in the problem
+  CONCEPT_SUBMITTED // BusinessConcept record submitted
+  SUPPORT_REQUESTED // Startup has filed one or more SupportRequests
+  SUPPORT_GRANTED   // At least one SupportRequest approved
+  BUILDING          // Active development / solution building
+  PILOTED           // Pilot or proof-of-concept delivered
+}
+
+/// University proposal lifecycle. Independent of Problem.status.
+enum ProposalStatus {
+  SUBMITTED    // Proposal submitted by university; awaiting admin review
+  UNDER_REVIEW // Admin is reviewing the proposal
+  ACCEPTED     // Proposal accepted; work can begin
+  IN_PROGRESS  // Active work underway
+  COMPLETED    // Deliverables submitted and confirmed
+  WITHDRAWN    // University withdrew the proposal
+}
+
+/// Industry collaboration lifecycle status. Independent of Problem.status.
+enum CollaborationStatus {
+  INTERESTED // Initial expression of interest / offer submitted
+  ACTIVE     // Collaboration actively underway
+  COMPLETED  // Collaboration concluded
+}
+
+// =============================================================================
+// MODELS
+// =============================================================================
+
+/// All authenticated users across all five roles.
+model User {
+  id           String  @id @default(uuid())
+  name         String
+  email        String  @unique
+  passwordHash String
+  role         Role
+
+  // Optional profile fields
+  phone    String?
+  district String?
+
+  // Institutional link (only for UNIVERSITY, INDUSTRY, STARTUP roles)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  // Relations
+  problems              Problem[]       @relation("CitizenProblems")
+  validations           Validation[]    @relation("AdminValidations")
+  verifiedProblems      Problem[]       @relation("AdminVerifications")
+  progressUpdates       ProgressUpdate[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([email])
+}
+
+/// Institutional entity representing a University, Industry, or Startup.
+/// Uses OrganizationType (not Role) to prevent CITIZEN / ADMIN from being
+/// used as an organization type.
+model Organization {
+  id   String           @id @default(uuid())
+  name String
+  type OrganizationType // UNIVERSITY, INDUSTRY, or STARTUP only
+
+  // Registration / identification codes
+  regCode String? // AICTE/UGC for University; CIN for Industry; DPIIT for Startup
+
+  // Domain and expertise tags used for AI matching
+  domainTags    String[]
+  expertiseTags String[]
+
+  district     String?
+  state        String  @default("Jharkhand")
+  contactEmail String
+  contactPhone String?
+
+  // Relations
+  users            User[]
+  proposals        Proposal[]
+  businessConcepts BusinessConcept[]
+  collaborations   Collaboration[]
+
+  createdAt DateTime @default(now())
+
+  @@index([type])
+}
+
+/// A civic problem submitted by an authenticated Citizen.
+///
+/// Visibility rule:
+///   filterStatus = PASSED  →  visible to all institutions.
+///   filterStatus = PENDING | REJECTED | FLAGGED  →  NOT visible.
+///
+/// verificationStatus is a parallel trust signal only. It does NOT control
+/// whether institutions can view or act on a problem.
+model Problem {
+  id           String  @id @default(uuid())
+  title        String
+  description  String  @db.Text
+  category     String  // e.g. "Water & Sanitation", "Rural Roads", "Education"
+  subCategory  String?
+  district     String  // One of 24 Jharkhand districts
+  locationText String?
+  latitude     Float?
+  longitude    Float?
+  affectedCount Int    @default(1)
+  evidenceUrl  String? // Photo or PDF storage URL
+
+  // --- Solution Lifecycle (independent of verification and priority) ---
+  status ProblemStatus @default(OPEN)
+
+  // --- AI Relevance Screening ---
+  // Default is PENDING: problem is NOT visible until AI pipeline sets PASSED.
+  filterStatus FilterStatus @default(PENDING)
+  filterReason String?
+
+  // --- Single Priority Metric ---
+  // Formula: (Severity×0.25)+(AffectedPeople×0.25)+(Frequency×0.15)+(Evidence×0.15)+(Urgency×0.20)
+  // All factors normalized 0–100. Score range: 0.0–100.0.
+  // Default 0.0 / LOW until AI pipeline or admin sets the real values.
+  priorityScore Float        @default(0.0)
+  priorityTier  PriorityTier @default(LOW)
+
+  // --- Parallel Government Trust Signal (NOT a visibility gate) ---
+  verificationStatus    VerificationStatus @default(AI_SCREENED)
+  verificationNotes     String?            @db.Text
+  verifiedAt            DateTime?
+  verifiedById          String?            // FK to User (Admin who verified)
+  verifiedBy            User?              @relation("AdminVerifications", fields: [verifiedById], references: [id])
+  verificationRequested Boolean            @default(false)
+
+  // --- Submitter (authenticated Citizen, required) ---
+  submittedById String
+  submittedBy   User   @relation("CitizenProblems", fields: [submittedById], references: [id])
+
+  // --- Subsystem Relations ---
+  aiAnalysis       AIAnalysis?
+  validation       Validation?
+  proposals        Proposal[]
+  businessConcepts BusinessConcept[]
+  collaborations   Collaboration[]
+  supportRequests  SupportRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([filterStatus])
+  @@index([status])
+  @@index([verificationStatus])
+  @@index([priorityTier])
+  @@index([district])
+  @@index([category])
+}
+
+/// AI analysis record for a problem. 1:1 with Problem, cascade-deleted.
+///
+/// Stores:
+///   - AI classification output (category, confidence)
+///   - Five normalized priority factor scores (0–100 each) for the approved formula
+///   - Raw AI urgency signal (1–10 scale, separate from the normalized urgency factor)
+///   - Duplicate detection results
+///   - pgvector semantic embedding
+model AIAnalysis {
+  id        String  @id @default(uuid())
+  problemId String  @unique
+  problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  // AI classification
+  predictedCategory String
+  confidenceScore   Float  // 0.0 – 1.0 (AI's classification confidence)
+
+  // AI narrative output
+  aiSummary String @db.Text
+
+  // --- Five normalized priority factor scores (0–100 each) ---
+  // Used to compute: (Severity×0.25)+(AffectedPeople×0.25)+(Frequency×0.15)+(Evidence×0.15)+(Urgency×0.20)
+  severityScore      Int // Weight: 25% — how harmful or dangerous the problem is
+  affectedPeopleScore Int // Weight: 25% — scale of population affected
+  frequencyScore     Int // Weight: 15% — how often the problem occurs
+  evidenceScore      Int // Weight: 15% — quality and quantity of supporting evidence
+  urgencyScore       Int // Weight: 20% — normalized urgency (0–100, derived from aiUrgencyScore)
+
+  // Raw AI urgency signal (1–10 scale from LLM output), retained for auditability.
+  // Stored separately for auditability. urgencyScore above is the normalized 0–100 version.
+  aiUrgencyScore  Int    // 1 – 10 (raw LLM urgency assessment)
+  aiUrgencyReason String @db.Text
+
+  // --- Duplicate Detection ---
+  isDuplicate         Boolean  @default(false)
+  duplicateSimilarity Float?   // Cosine similarity score of the closest match (0.0–1.0)
+  similarProblemIds   String[] // UUIDs of potential duplicate problems
+
+  // pgvector embedding for semantic search and duplicate detection (1536-dim, e.g. text-embedding-3-small)
+  embedding Unsupported("vector(1536)")?
+
+  createdAt DateTime @default(now())
+}
+
+/// Government admin validation record. Stores the five factor scores and the
+/// final trust decision. The recalculated result is written only to
+/// Problem.priorityScore; this model does not persist a second priority score.
+/// 1:1 with Problem, cascade-deleted.
+/// Does NOT gate institutional access; Problem.filterStatus controls visibility.
+model Validation {
+  id        String  @id @default(uuid())
+  problemId String  @unique
+  problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  reviewedById String
+  reviewedBy   User   @relation("AdminValidations", fields: [reviewedById], references: [id])
+
+  // Five normalized factor scores (0–100 each) — admin's assessment
+  // Formula: (severityScore×0.25)+(affectedScore×0.25)+(frequencyScore×0.15)+(evidenceScore×0.15)+(urgencyScore×0.20)
+  severityScore  Int // Weight: 25%
+  affectedScore  Int // Weight: 25%
+  frequencyScore Int // Weight: 15%
+  evidenceScore  Int // Weight: 15%
+  urgencyScore   Int // Weight: 20%
+
+  // Government's trust decision (does NOT gate institutional access)
+  decision   VerificationStatus // GOVERNMENT_VERIFIED or DECLINED_BY_GOVT
+  remarks    String?            @db.Text
+  reviewedAt DateTime           @default(now())
+}
+
+/// University proposal for solving a civic problem.
+/// Multiple proposals can exist for the same problem (different universities).
+/// ProposalStatus is independent of Problem.status.
+model Proposal {
+  id           String         @id @default(uuid())
+  problemId    String
+  problem      Problem        @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  universityId String
+  university   Organization   @relation(fields: [universityId], references: [id])
+
+  facultyMentor    String
+  teamMembers      Json           // [{ name, email, rollNo, role }]
+  proposedApproach String         @db.Text
+  deliverables     String         @db.Text
+  timelineStart    DateTime
+  timelineEnd      DateTime
+  milestones       Json           // [{ title, deadline, status }]
+  budgetRequired   Float?
+
+  // Proposal's own lifecycle (independent of Problem.status)
+  status ProposalStatus @default(SUBMITTED)
+
+  progressUpdates ProgressUpdate[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([problemId])
+  @@index([universityId])
+  @@index([status])
+}
+
+/// Startup's business concept for solving a civic problem.
+/// Multiple concepts can exist for the same problem simultaneously.
+/// VentureStage is independent of Problem.status.
+model BusinessConcept {
+  id        String         @id @default(uuid())
+  problemId String
+  problem   Problem        @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  startupId String
+  startup   Organization   @relation(fields: [startupId], references: [id])
+
+  solutionDescription String @db.Text
+  targetBeneficiaries String @db.Text
+  marketSize          String?
+  businessModel       String @db.Text
+  revenueModel        String @db.Text
+  sustainabilityModel String @db.Text
+
+  // Venture's own lifecycle stage (independent of Problem.status)
+  currentStage VentureStage @default(PROBLEM_CLAIMED)
+
+  supportRequests SupportRequest[]
+  progressUpdates ProgressUpdate[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([problemId])
+  @@index([startupId])
+}
+
+/// Support request filed by a startup, directed at Government, University, or Industry.
+/// Linked to both BusinessConcept and Problem for full context.
+model SupportRequest {
+  id                String          @id @default(uuid())
+  businessConceptId String
+  businessConcept   BusinessConcept @relation(fields: [businessConceptId], references: [id], onDelete: Cascade)
+  problemId         String
+  problem           Problem         @relation(fields: [problemId], references: [id])
+
+  requestedFrom Role   // ADMIN (Government), UNIVERSITY, or INDUSTRY
+  requestType   String // "Mentorship", "Lab Testing", "Scheme Referral", etc.
+  details       String @db.Text
+
+  // Support request's own status (independent of BusinessConcept stage)
+  status        String  @default("PENDING") // PENDING | APPROVED | REJECTED
+  responseNotes String?
+
+  createdAt DateTime @default(now())
+}
+
+/// Industry collaboration offer or expression of interest on a problem.
+/// Multiple industries can collaborate on the same problem simultaneously.
+/// Status is independent of Problem.status.
+model Collaboration {
+  id         String         @id @default(uuid())
+  problemId  String
+  problem    Problem        @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  industryId String
+  industry   Organization   @relation(fields: [industryId], references: [id])
+
+  supportType SupportType // MENTORSHIP | TECHNICAL | PROTOTYPING | GENERAL_INTEREST
+  message     String      @db.Text
+
+  // Collaboration's own status (independent of Problem.status)
+  status CollaborationStatus @default(INTERESTED)
+
+  createdAt DateTime @default(now())
+
+  @@index([problemId])
+  @@index([industryId])
+  @@index([status])
+}
+
+/// Progress update log for a Proposal or BusinessConcept.
+///
+/// XOR constraint: a ProgressUpdate must belong to EXACTLY ONE parent.
+/// proposalId and businessConceptId cannot both be NULL (orphan) or both be
+/// populated (ambiguous). This is enforced by the database CHECK constraint below.
+///
+/// NOTE: The following CHECK constraint is applied in the initial migration SQL
+/// and is NOT natively expressible in Prisma schema syntax:
+///
+///   ALTER TABLE "ProgressUpdate"
+///   ADD CONSTRAINT "progress_update_xor_parent"
+///   CHECK (
+///     ("proposalId" IS NOT NULL AND "businessConceptId" IS NULL) OR
+///     ("proposalId" IS NULL AND "businessConceptId" IS NOT NULL)
+///   );
+model ProgressUpdate {
+  id                String           @id @default(uuid())
+  proposalId        String?
+  proposal          Proposal?        @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  businessConceptId String?
+  businessConcept   BusinessConcept? @relation(fields: [businessConceptId], references: [id], onDelete: Cascade)
+
+  updateText     String  @db.Text
+  milestoneTitle String?
+  attachmentUrl  String?
+
+  postedById String
+  postedBy   User   @relation(fields: [postedById], references: [id])
+
+  createdAt DateTime @default(now())
+}
