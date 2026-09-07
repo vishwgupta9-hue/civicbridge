@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth, getDashboardPath } from "../context/AuthContext";
+import { API_BASE_URL } from "../config/api";
 import {
   Search,
   Filter,
@@ -123,7 +124,7 @@ export const ProblemBankPage: React.FC = () => {
       // Update URL query parameters
       setSearchParams(params, { replace: true });
 
-      const res = await fetch(`http://localhost:5000/api/problems?${params.toString()}`, {
+      const res = await fetch(`${API_BASE_URL}/problems?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

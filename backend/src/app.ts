@@ -34,6 +34,7 @@ app.get("/", (_req, res) => {
 
 // API Routes
 app.use("/api", healthRouter);
+app.use("/", healthRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/problems", problemRouter);
 app.use("/api/admin", adminRouter);

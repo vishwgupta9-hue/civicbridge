@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, Role } from "../types/index";
+import { API_BASE_URL } from "../config/api";
 
 interface AuthContextType {
   user: User | null;
@@ -14,7 +15,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const TOKEN_KEY = "civicbridge_auth_token";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = API_BASE_URL;
 
 export function getDashboardPath(role: Role): string {
   switch (role) {

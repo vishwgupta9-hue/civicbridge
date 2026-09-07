@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../config/api";
 import {
   ArrowLeft,
   AlertCircle,
@@ -176,7 +177,7 @@ export const ReportProblemPage: React.FC = () => {
     let newProblem: any = null;
 
     try {
-      const createRes = await fetch("http://localhost:5000/api/problems", {
+      const createRes = await fetch(`${API_BASE_URL}/problems`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -226,7 +227,7 @@ export const ReportProblemPage: React.FC = () => {
     setActiveStepText("Running AI relevance screening & 5-factor priority calculation...");
 
     try {
-      const aiRes = await fetch(`http://localhost:5000/api/problems/${newProblem.id}/process-ai`, {
+      const aiRes = await fetch(`${API_BASE_URL}/problems/${newProblem.id}/process-ai`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

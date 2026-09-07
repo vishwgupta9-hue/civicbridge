@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { API_BASE_URL } from "../../config/api";
 import {
   LogOut,
   ShieldCheck,
@@ -79,7 +80,7 @@ export const AdminDashboard: React.FC = () => {
     setError(null);
 
     try {
-      const res = await fetch("http://localhost:5000/api/admin/verification-queue", {
+      const res = await fetch(`${API_BASE_URL}/admin/verification-queue`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -122,8 +123,8 @@ export const AdminDashboard: React.FC = () => {
     const { type, problem } = actionModal;
     const endpoint =
       type === "VERIFY"
-        ? `http://localhost:5000/api/admin/problems/${problem.id}/verify`
-        : `http://localhost:5000/api/admin/problems/${problem.id}/decline`;
+        ? `${API_BASE_URL}/admin/problems/${problem.id}/verify`
+        : `${API_BASE_URL}/admin/problems/${problem.id}/decline`;
 
     try {
       const res = await fetch(endpoint, {

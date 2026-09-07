@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useAuth, getDashboardPath } from "../context/AuthContext";
+import { API_BASE_URL } from "../config/api";
 import {
   ArrowLeft,
   ShieldCheck,
@@ -215,7 +216,7 @@ export const ProblemDetailsPage: React.FC = () => {
     setError(null);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/problems/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/problems/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -272,7 +273,7 @@ export const ProblemDetailsPage: React.FC = () => {
     setActionMessage(null);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/problems/${id}/proposals`, {
+      const res = await fetch(`${API_BASE_URL}/problems/${id}/proposals`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -305,7 +306,7 @@ export const ProblemDetailsPage: React.FC = () => {
     setActionMessage(null);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/problems/${id}/business-concepts`, {
+      const res = await fetch(`${API_BASE_URL}/problems/${id}/business-concepts`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -338,7 +339,7 @@ export const ProblemDetailsPage: React.FC = () => {
     setActionMessage(null);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/problems/${id}/collaborations`, {
+      const res = await fetch(`${API_BASE_URL}/problems/${id}/collaborations`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -372,11 +373,11 @@ export const ProblemDetailsPage: React.FC = () => {
 
     let endpoint = "";
     if (progressTarget.type === "proposal") {
-      endpoint = `http://localhost:5000/api/proposals/${progressTarget.id}/progress`;
+      endpoint = `${API_BASE_URL}/proposals/${progressTarget.id}/progress`;
     } else if (progressTarget.type === "concept") {
-      endpoint = `http://localhost:5000/api/business-concepts/${progressTarget.id}/progress`;
+      endpoint = `${API_BASE_URL}/business-concepts/${progressTarget.id}/progress`;
     } else if (progressTarget.type === "collab") {
-      endpoint = `http://localhost:5000/api/collaborations/${progressTarget.id}/progress`;
+      endpoint = `${API_BASE_URL}/collaborations/${progressTarget.id}/progress`;
     }
 
     try {
