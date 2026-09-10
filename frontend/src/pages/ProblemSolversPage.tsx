@@ -34,8 +34,8 @@ export const ProblemSolversPage: React.FC = () => {
     error: projError,
   } = useApi<any[]>(token ? `${API_BASE_URL}/projects?problemId=${id}` : '');
 
-  const isLoading = orgLoading || projLoading;
-  const error = orgError || projError;
+  const isLoading = problemLoading || orgLoading || projLoading;
+  const error = problemError || orgError || projError;
 
   return (
     <div className="min-h-screen bg-gray-50">
