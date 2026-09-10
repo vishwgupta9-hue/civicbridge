@@ -74,3 +74,45 @@ export async function authenticate(
     });
   }
 }
+
+/**
+ * Optional Authentication Middleware:
+ * If a valid Bearer token is provided, attaches the user to req.user.
+ * If no token is provided or the token is invalid, continues as an unauthenticated request without failing.
+ */
+export async function optionalAuthenticate(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return next();
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const payload = verifyToken(token);
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        district: true,
+        organizationId: true,
+      },
+    });
+
+    if (user) {
+      req.user = user;
+    }
+  } catch {
+    // Silently continue for optional authentication
+  }
+
+  next();
+}

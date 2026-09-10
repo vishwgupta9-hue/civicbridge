@@ -79,13 +79,44 @@ app.get("/", (_req, res) => {
   });
 });
 
+import uploadRouter from "./routes/upload.routes.js";
+import universityRouter from "./routes/university.routes.js";
+import startupRouter from "./routes/startup.routes.js";
+import industryRouter from "./routes/industry.routes.js";
+import projectRouter from "./routes/project.routes.js";
+import exchangeRouter from "./routes/exchange.routes.js";
+import discoveryRouter from "./routes/discovery.routes.js";
+import collaborationRouter from "./routes/collaboration.routes.js";
+import milestoneRouter from "./routes/milestone.routes.js";
+import progressRouter from "./routes/progress.routes.js";
+import pilotRouter from "./routes/pilot.routes.js";
+import path from "path";
+
+// Static uploads serving (with cross-origin headers)
+const uploadsPath = path.join(process.cwd(), "uploads");
+app.use("/uploads", express.static(uploadsPath));
+app.use("/api/uploads", express.static(uploadsPath));
+
 // API Routes
 app.use("/api", healthRouter);
 app.use("/", healthRouter);
 app.use("/api/auth", authRouter);
+app.use("/api/upload", uploadRouter);
 app.use("/api/problems", problemRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/university", universityRouter);
+app.use("/api/startup", startupRouter);
+app.use("/api/industry", industryRouter);
 app.use("/api", institutionalRouter);
+
+// V3 Core API Routes
+app.use("/api/projects", projectRouter);
+app.use("/api", exchangeRouter);
+app.use("/api/discovery", discoveryRouter);
+app.use("/api/collaborations", collaborationRouter);
+app.use("/api/milestones", milestoneRouter);
+app.use("/api/progress-updates", progressRouter);
+app.use("/api/pilots", pilotRouter);
 
 // Global error handler
 app.use(errorHandler);

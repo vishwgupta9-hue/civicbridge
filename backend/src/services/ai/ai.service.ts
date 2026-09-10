@@ -2,6 +2,7 @@ import { FilterStatus, PriorityTier, Problem } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { GeminiAIService } from "./gemini.ai.service.js";
 import { detectDuplicates } from "./duplicate.detector.js";
+import { embeddingService } from "./embedding.service.js";
 import { AIAnalysisResult } from "./ai.types.js";
 
 const aiEngine = new GeminiAIService();
@@ -12,9 +13,11 @@ const aiEngine = new GeminiAIService();
  * Implements the complete multi-stage AI triage architecture:
  * 1. Relevance & Spam Classification (PASSED / REJECTED / FLAGGED)
  * 2. Domain Categorization & 2-Sentence Summarization
- * 3. Advisory Duplicate Candidate Detection (NEVER auto-rejects)
- * 4. Exact 5-Factor Normalized Priority Score Calculation
- * 5. Database Persistence and Problem Record Synchronization
+ * 3. Problem DNA Extraction (Root-Causes, Required Expertise, Department Hints)
+ * 4. Text Embedding Generation & PostgreSQL pgvector Storage
+ * 5. Advisory Duplicate Candidate Detection (pgvector + Jaccard fallback)
+ * 6. Exact 5-Factor Normalized Priority Score Calculation
+ * 7. Database Persistence and Problem Record Synchronization
  */
 export class AIService {
   /**
@@ -27,10 +30,12 @@ export class AIService {
     result: AIAnalysisResult;
   }> {
     if (problem.filterStatus !== FilterStatus.PENDING) {
-      throw new Error(`Problem ${problem.id} has already been screened (filterStatus: ${problem.filterStatus}). Only PENDING problems can be processed.`);
+      throw new Error(
+        `Problem ${problem.id} has already been screened (filterStatus: ${problem.filterStatus}). Only PENDING problems can be processed.`
+      );
     }
 
-    // Stages 1, 2, & 4: Relevance, Classification, Summary, and Normalized Scoring
+    // Stages 1, 2, & 3: Relevance, Classification, Summary, Scoring & Problem DNA
     const baseAnalysis = await aiEngine.analyze({
       title: problem.title,
       description: problem.description,
@@ -41,12 +46,17 @@ export class AIService {
       evidenceUrl: problem.evidenceUrl,
     });
 
-    // Stage 3: Duplicate Candidate Detection (Advisory only — never auto-rejects)
+    // Stage 4: Embedding generation
+    const embeddingText = `${problem.title}. ${problem.description}. Category: ${baseAnalysis.predictedCategory}. District: ${problem.district}.`;
+    const embedding = await embeddingService.generateEmbedding(embeddingText);
+
+    // Stage 5: Advisory Duplicate Detection (pgvector preferred, Jaccard fallback)
     const duplicateInfo = await detectDuplicates(
       problem.id,
       problem.title,
       problem.description,
-      problem.district
+      problem.district,
+      embedding
     );
 
     const fullResult: AIAnalysisResult = {
@@ -54,10 +64,11 @@ export class AIService {
       isDuplicate: duplicateInfo.isDuplicate,
       duplicateSimilarity: duplicateInfo.duplicateSimilarity,
       similarProblemIds: duplicateInfo.similarProblemIds,
+      duplicateStatus: duplicateInfo.duplicateStatus,
+      duplicateCandidateTitle: duplicateInfo.duplicateCandidateTitle,
     };
 
-    // Stage 5 & 6: Persistence to PostgreSQL via Prisma
-    // 1. Create or update AIAnalysis record
+    // Stage 6: Persistence to PostgreSQL via Prisma
     const aiAnalysis = await prisma.aIAnalysis.upsert({
       where: { problemId: problem.id },
       update: {
@@ -74,6 +85,9 @@ export class AIService {
         isDuplicate: fullResult.isDuplicate,
         duplicateSimilarity: fullResult.duplicateSimilarity,
         similarProblemIds: fullResult.similarProblemIds,
+        rootCauseHypotheses: fullResult.rootCauseHypotheses,
+        requiredExpertise: fullResult.requiredExpertise,
+        departmentHints: fullResult.departmentHints,
       },
       create: {
         problemId: problem.id,
@@ -90,15 +104,18 @@ export class AIService {
         isDuplicate: fullResult.isDuplicate,
         duplicateSimilarity: fullResult.duplicateSimilarity,
         similarProblemIds: fullResult.similarProblemIds,
+        rootCauseHypotheses: fullResult.rootCauseHypotheses,
+        requiredExpertise: fullResult.requiredExpertise,
+        departmentHints: fullResult.departmentHints,
       },
     });
 
-    // 2. Update Problem record:
-    // - Updates filterStatus (PASSED, REJECTED, or FLAGGED)
-    // - Updates priorityScore & priorityTier
-    // - Flags verificationRequested if priorityTier is HIGH (surfaced in Govt queue)
-    // - PRESERVES lifecycle status (e.g. OPEN)
-    // - PRESERVES government verificationStatus (e.g. AI_SCREENED)
+    // Stage 7: Persist vector embedding into PostgreSQL pgvector column
+    if (embedding && embedding.length === 1536) {
+      await embeddingService.storeEmbedding(aiAnalysis.id, embedding);
+    }
+
+    // Stage 8: Update Problem record
     const updatedProblem = await prisma.problem.update({
       where: { id: problem.id },
       data: {

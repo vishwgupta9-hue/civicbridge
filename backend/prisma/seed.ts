@@ -30,6 +30,7 @@ const SEED_IDS = {
   COLLAB_1: "99999999-9999-4999-a999-999999999999",
   UPDATE_PROPOSAL: "66666666-6666-4666-a666-666666666666",
   UPDATE_CONCEPT: "55555555-5555-4555-a555-555555555555",
+  SUPPORT_REQ_1: "44444444-4444-4444-a444-444444444444",
 };
 
 // Documented development passwords
@@ -232,7 +233,15 @@ async function main() {
 
   await prisma.aIAnalysis.upsert({
     where: { problemId: problem1.id },
-    update: {},
+    update: {
+      rootCauseHypotheses: [
+        "Geogenic bedrock fluoride leaching into deep aquifers.",
+        "Over-extraction of groundwater depleting shallow recharge zones.",
+        "Lack of community-level activated alumina filtration systems."
+      ],
+      requiredExpertise: ["Environmental Engineering", "Water Quality Chemistry", "Hydrogeology"],
+      departmentHints: ["Drinking Water & Sanitation Department (DWSD)", "Public Health Engineering Department (PHED)"],
+    },
     create: {
       problemId: problem1.id,
       predictedCategory: "Water & Sanitation",
@@ -246,6 +255,13 @@ async function main() {
       aiUrgencyScore: 9,
       aiUrgencyReason: "Potentially toxic fluoride intake requires urgent clean water access to prevent irreversible pediatric skeletal deformities.",
       isDuplicate: false,
+      rootCauseHypotheses: [
+        "Geogenic bedrock fluoride leaching into deep aquifers.",
+        "Over-extraction of groundwater depleting shallow recharge zones.",
+        "Lack of community-level activated alumina filtration systems."
+      ],
+      requiredExpertise: ["Environmental Engineering", "Water Quality Chemistry", "Hydrogeology"],
+      departmentHints: ["Drinking Water & Sanitation Department (DWSD)", "Public Health Engineering Department (PHED)"],
     },
   });
 
@@ -296,7 +312,15 @@ async function main() {
 
   await prisma.aIAnalysis.upsert({
     where: { problemId: problem2.id },
-    update: {},
+    update: {
+      rootCauseHypotheses: [
+        "Uncovered heavy transit of raw coking coal on non-tarred arterial link roads.",
+        "Absence of automated dust-suppression mist cannons at critical transit crossings.",
+        "High wind dispersal during peak afternoon transport hours."
+      ],
+      requiredExpertise: ["Aerosol Science", "Air Quality Engineering", "Transportation Systems"],
+      departmentHints: ["Jharkhand State Pollution Control Board (JSPCB)", "Department of Mines and Geology"],
+    },
     create: {
       problemId: problem2.id,
       predictedCategory: "Environment & Pollution",
@@ -310,6 +334,13 @@ async function main() {
       aiUrgencyScore: 9,
       aiUrgencyReason: "Extreme particulate exposure poses immediate chronic obstructive pulmonary risk to school children and residents.",
       isDuplicate: false,
+      rootCauseHypotheses: [
+        "Uncovered heavy transit of raw coking coal on non-tarred arterial link roads.",
+        "Absence of automated dust-suppression mist cannons at critical transit crossings.",
+        "High wind dispersal during peak afternoon transport hours."
+      ],
+      requiredExpertise: ["Aerosol Science", "Air Quality Engineering", "Transportation Systems"],
+      departmentHints: ["Jharkhand State Pollution Control Board (JSPCB)", "Department of Mines and Geology"],
     },
   });
 
@@ -347,7 +378,15 @@ async function main() {
 
   await prisma.aIAnalysis.upsert({
     where: { problemId: problem3.id },
-    update: {},
+    update: {
+      rootCauseHypotheses: [
+        "Heavy silt and plastic debris clogging stormwater culvert outlets.",
+        "Inadequate gradient slope leading to reverse water stagnation during rainfall.",
+        "Encroachment on natural catchment drainage channels."
+      ],
+      requiredExpertise: ["Civil Infrastructure Engineering", "Urban Hydrology", "Municipal Sanitation"],
+      departmentHints: ["Urban Development & Housing Department", "Jamshedpur Notified Area Committee (JNAC)"],
+    },
     create: {
       problemId: problem3.id,
       predictedCategory: "Civic Infrastructure",
@@ -361,6 +400,13 @@ async function main() {
       aiUrgencyScore: 5,
       aiUrgencyReason: "Seasonal obstacle requiring structural silt-trap and pumping solution before peak monsoon.",
       isDuplicate: false,
+      rootCauseHypotheses: [
+        "Heavy silt and plastic debris clogging stormwater culvert outlets.",
+        "Inadequate gradient slope leading to reverse water stagnation during rainfall.",
+        "Encroachment on natural catchment drainage channels."
+      ],
+      requiredExpertise: ["Civil Infrastructure Engineering", "Urban Hydrology", "Municipal Sanitation"],
+      departmentHints: ["Urban Development & Housing Department", "Jamshedpur Notified Area Committee (JNAC)"],
     },
   });
 
@@ -411,7 +457,15 @@ async function main() {
 
   await prisma.aIAnalysis.upsert({
     where: { problemId: problem4.id },
-    update: {},
+    update: {
+      rootCauseHypotheses: [
+        "Mechanical gear stripping on secondary sluice regulator gate.",
+        "Absence of periodic desiltation along canal bed diverting water into farmlands.",
+        "Lack of remote telemetry water-level gate position sensors."
+      ],
+      requiredExpertise: ["Irrigation Engineering", "Mechanical Maintenance", "Hydraulics"],
+      departmentHints: ["Water Resources Department", "Department of Agriculture and Sugarcane Development"],
+    },
     create: {
       problemId: problem4.id,
       predictedCategory: "Agriculture & Irrigation",
@@ -425,6 +479,13 @@ async function main() {
       aiUrgencyScore: 6,
       aiUrgencyReason: "Crop damage risks escalate with each delayed irrigation cycle during sowing season.",
       isDuplicate: false,
+      rootCauseHypotheses: [
+        "Mechanical gear stripping on secondary sluice regulator gate.",
+        "Absence of periodic desiltation along canal bed diverting water into farmlands.",
+        "Lack of remote telemetry water-level gate position sensors."
+      ],
+      requiredExpertise: ["Irrigation Engineering", "Mechanical Maintenance", "Hydraulics"],
+      departmentHints: ["Water Resources Department", "Department of Agriculture and Sugarcane Development"],
     },
   });
 
@@ -459,7 +520,15 @@ async function main() {
 
   await prisma.aIAnalysis.upsert({
     where: { problemId: problem5.id },
-    update: {},
+    update: {
+      rootCauseHypotheses: [
+        "Premature thermal degradation of lithium ferro-phosphate battery units.",
+        "Lack of preventive scheduled battery maintenance contract.",
+        "Dust accumulation reducing solar panel charging efficiency."
+      ],
+      requiredExpertise: ["Electrical Engineering", "Solar Photovoltaic Systems", "Battery Energy Storage"],
+      departmentHints: ["Jharkhand Renewable Energy Development Agency (JREDA)", "Energy Department"],
+    },
     create: {
       problemId: problem5.id,
       predictedCategory: "Public Safety & Lighting",
@@ -473,6 +542,13 @@ async function main() {
       aiUrgencyScore: 3,
       aiUrgencyReason: "Low physical hazard; standard component replacement required.",
       isDuplicate: false,
+      rootCauseHypotheses: [
+        "Premature thermal degradation of lithium ferro-phosphate battery units.",
+        "Lack of preventive scheduled battery maintenance contract.",
+        "Dust accumulation reducing solar panel charging efficiency."
+      ],
+      requiredExpertise: ["Electrical Engineering", "Solar Photovoltaic Systems", "Battery Energy Storage"],
+      departmentHints: ["Jharkhand Renewable Energy Development Agency (JREDA)", "Energy Department"],
     },
   });
 
@@ -574,6 +650,25 @@ async function main() {
       supportType: SupportType.TECHNICAL, // Strictly TECHNICAL / MENTORSHIP / PROTOTYPING / GENERAL_INTEREST
       message: "Tata Steel's Advanced Water Technology lab at Jamshedpur offers full spectrometry validation for the BIT Mesra team's filter effluent and technical mentoring on scaling column adsorption life.",
       status: CollaborationStatus.ACTIVE,
+    },
+  });
+
+  // =========================================================================
+  // 7. STARTUP SUPPORT REQUEST (Attached to Problem 2 / Concept 1 - Dust Suppression)
+  // =========================================================================
+  console.log("  → Upserting Startup Support Request...");
+
+  await prisma.supportRequest.upsert({
+    where: { id: SEED_IDS.SUPPORT_REQ_1 },
+    update: {},
+    create: {
+      id: SEED_IDS.SUPPORT_REQ_1,
+      businessConceptId: concept1.id,
+      problemId: problem2.id,
+      requestedFrom: Role.INDUSTRY,
+      requestType: "Pilot Testing & Spectrometry Validation",
+      details: "Requesting access to Tata Steel CSR & Environmental Lab for particle size analysis and industrial misting nozzle endurance benchmarking.",
+      status: "PENDING",
     },
   });
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { User, Role } from "../types/index";
+import { User, Role, RegisterPayload } from "../types/index";
 import { API_BASE_URL } from "../config/api";
 
 interface AuthContextType {
@@ -8,6 +8,7 @@ interface AuthContextType {
   isLoading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: Role }>;
+  register: (payload: RegisterPayload) => Promise<{ success: boolean; error?: string; role?: Role }>;
   logout: () => void;
   getDashboardPath: (role: Role) => string;
 }
@@ -117,6 +118,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const register = async (payload: RegisterPayload) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_URL}/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        const errMsg = data.error || (data.details ? Object.values(data.details).flat().join(". ") : "Registration failed.");
+        setError(errMsg);
+        setIsLoading(false);
+        return { success: false, error: errMsg };
+      }
+
+      localStorage.setItem(TOKEN_KEY, data.token);
+      setToken(data.token);
+      setUser(data.user);
+      setIsLoading(false);
+
+      return { success: true, role: data.user.role as Role };
+    } catch (err: any) {
+      const errMsg = "Unable to connect to CivicBridge registration service. Please ensure the backend is running.";
+      setError(errMsg);
+      setIsLoading(false);
+      return { success: false, error: errMsg };
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
@@ -132,6 +169,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         error,
         login,
+        register,
         logout,
         getDashboardPath,
       }}

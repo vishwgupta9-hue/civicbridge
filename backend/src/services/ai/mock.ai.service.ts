@@ -11,36 +11,134 @@ const UNCERTAINTY_KEYWORDS = [
   "not sure", "maybe", "someone said", "unconfirmed", "rumor", "allegedly", "might be", "possibly"
 ];
 
-const CATEGORY_KEYWORDS: Record<string, { category: string; subCategory: string; keywords: string[] }> = {
+const CATEGORY_KEYWORDS: Record<
+  string,
+  {
+    category: string;
+    subCategory: string;
+    keywords: string[];
+    rootCauses: string[];
+    expertise: string[];
+    departments: string[];
+  }
+> = {
   water: {
     category: "Water & Sanitation",
     subCategory: "Drinking Water Supply & Quality",
-    keywords: ["water", "drinking", "borewell", "handpump", "pipe", "leakage", "sewage", "drain", "drainage", "fluoride", "arsenic", "well", "tanker"]
+    keywords: ["water", "drinking", "borewell", "handpump", "pipe", "leakage", "sewage", "drain", "drainage", "fluoride", "arsenic", "well", "tanker"],
+    rootCauses: [
+      "Aging underground pipeline corrosion or breakage",
+      "Aquifer contamination and unmonitored industrial/surface runoff",
+      "Insufficient decentralized filtration and testing infrastructure",
+    ],
+    expertise: [
+      "Environmental Engineering",
+      "Hydrogeology & Water Resource Management",
+      "Public Health & Microbial Analysis",
+    ],
+    departments: [
+      "Drinking Water and Sanitation Department (DWSD)",
+      "Jharkhand State Water and Sanitation Mission",
+      "Urban Development & Housing Department",
+    ],
   },
   roads: {
     category: "Rural Roads & Transport",
     subCategory: "Road Maintenance & Potholes",
-    keywords: ["road", "pothole", "bridge", "culvert", "highway", "transport", "bus", "traffic", "lane", "street", "pavement"]
+    keywords: ["road", "pothole", "bridge", "culvert", "highway", "transport", "bus", "traffic", "lane", "street", "pavement"],
+    rootCauses: [
+      "Substandard bituminous pavement compaction and inadequate road base depth",
+      "Heavy monsoon waterlogging from absent side-drainage culverts",
+      "Excessive axle load from heavy freight traffic exceeding rural road ratings",
+    ],
+    expertise: [
+      "Civil & Transportation Engineering",
+      "Geotechnical Material Testing",
+      "Hydrological Drainage Design",
+    ],
+    departments: [
+      "Road Construction Department (RCD)",
+      "Rural Development Department (RDD - PMGSY)",
+      "Jharkhand State Road Transport Corporation",
+    ],
   },
   environment: {
     category: "Environment & Pollution",
     subCategory: "Air & Dust Pollution",
-    keywords: ["pollution", "dust", "smoke", "air", "waste", "garbage", "dump", "coal", "industrial", "mining", "forest", "emission"]
+    keywords: ["pollution", "dust", "smoke", "air", "waste", "garbage", "dump", "coal", "industrial", "mining", "forest", "emission"],
+    rootCauses: [
+      "Uncovered industrial freight transport and open coal dust dispersal",
+      "Improper municipal solid waste segregation and unscientific landfill burning",
+      "Effluent discharge exceeding biological oxygen demand thresholds",
+    ],
+    expertise: [
+      "Air Quality Modeling & Atmospheric Science",
+      "Chemical & Environmental Waste Processing",
+      "Industrial Ecology & Pollution Abatement",
+    ],
+    departments: [
+      "Jharkhand State Pollution Control Board (JSPCB)",
+      "Department of Forest, Environment and Climate Change",
+      "Mines and Geology Department",
+    ],
   },
   health: {
     category: "Public Healthcare & Clinics",
     subCategory: "Primary Health Center Services",
-    keywords: ["hospital", "clinic", "doctor", "medicine", "health", "ambulance", "nurse", "vaccine", "disease", "illness", "medical"]
+    keywords: ["hospital", "clinic", "doctor", "medicine", "health", "ambulance", "nurse", "vaccine", "disease", "illness", "medical"],
+    rootCauses: [
+      "Understaffed rural community health centers and specialist shortages",
+      "Suboptimal cold-chain maintenance for essential vaccine supplies",
+      "Diagnostic equipment disrepair due to remote maintenance bottlenecks",
+    ],
+    expertise: [
+      "Public Health Administration & Epidemiology",
+      "Biomedical Instrumentation & Cold Chain Logistics",
+      "Telemedicine & Rural Health Systems",
+    ],
+    departments: [
+      "Department of Health, Medical Education & Family Welfare",
+      "National Health Mission (NHM Jharkhand)",
+    ],
   },
   agriculture: {
     category: "Agriculture & Irrigation",
     subCategory: "Canal & Water Flow Control",
-    keywords: ["crop", "irrigation", "canal", "farmer", "agriculture", "paddy", "sluice", "drought", "soil", "fertilizer", "harvest"]
+    keywords: ["crop", "irrigation", "canal", "farmer", "agriculture", "paddy", "sluice", "drought", "soil", "fertilizer", "harvest"],
+    rootCauses: [
+      "Canal siltation preventing tail-end command area water delivery",
+      "Lack of micro-irrigation systems and soil moisture tracking sensors",
+      "Seasonal price volatility and inadequate localized cold storage facilities",
+    ],
+    expertise: [
+      "Agronomy & Soil Science",
+      "Irrigation & Hydraulic Engineering",
+      "Post-Harvest Agri-Tech & Supply Chain Logistics",
+    ],
+    departments: [
+      "Department of Agriculture, Animal Husbandry & Co-operative",
+      "Water Resources Department (Minor Irrigation)",
+    ],
   },
   power: {
     category: "Power & Renewable Energy",
     subCategory: "Rural Electrification & Lighting",
-    keywords: ["solar", "power", "electricity", "transformer", "pole", "wire", "outage", "streetlight", "lighting", "blackout"]
+    keywords: ["solar", "power", "electricity", "transformer", "pole", "wire", "outage", "streetlight", "lighting", "blackout"],
+    rootCauses: [
+      "Distribution transformer overload from unauthorized load spikes",
+      "Vegetation contact along low-tension rural distribution lines",
+      "Lack of remote grid-monitoring telemetries and automated fault isolation",
+    ],
+    expertise: [
+      "Power Systems & High-Voltage Engineering",
+      "Renewable Solar Microgrid Integration",
+      "IoT Fault Diagnostics & Smart Grid Automation",
+    ],
+    departments: [
+      "Jharkhand Bijli Vitran Nigam Limited (JBVNL)",
+      "Jharkhand Renewable Energy Development Agency (JREDA)",
+      "Energy Department",
+    ],
   },
 };
 
@@ -57,7 +155,10 @@ export class MockAIService {
     district: string;
     affectedCount?: number | null;
     evidenceUrl?: string | null;
-  }): Omit<AIAnalysisResult, "isDuplicate" | "duplicateSimilarity" | "similarProblemIds"> {
+  }): Omit<
+    AIAnalysisResult,
+    "isDuplicate" | "duplicateSimilarity" | "similarProblemIds" | "duplicateStatus" | "duplicateCandidateTitle"
+  > {
     const combinedText = `${problem.title} ${problem.description}`.toLowerCase();
 
     // 1. Stage 1: Relevance & Spam Screening
@@ -84,14 +185,31 @@ export class MockAIService {
       }
     }
 
-    // 2. Stage 2: Categorization & 2-Sentence Summary
+    // 2. Stage 2: Categorization & Problem DNA
     let predictedCategory = problem.category || "Civic Infrastructure";
     let predictedSubCategory: string | null = problem.subCategory || null;
+    let rootCauseHypotheses: string[] = [
+      "Deferred civic maintenance and prolonged absence of regular inspection cycles.",
+      "Accelerated wear from heavy community usage without capacity upgrades.",
+      "Need for localized sensor monitoring or structural repair.",
+    ];
+    let requiredExpertise: string[] = [
+      "Civil & Municipal Engineering",
+      "Community Infrastructure Management",
+      "Public Policy & Resource Planning",
+    ];
+    let departmentHints: string[] = [
+      "Urban Development & Housing Department",
+      "District Administration Triage Cell",
+    ];
 
     for (const entry of Object.values(CATEGORY_KEYWORDS)) {
       if (entry.keywords.some((kw) => combinedText.includes(kw))) {
         predictedCategory = entry.category;
         predictedSubCategory = entry.subCategory;
+        rootCauseHypotheses = entry.rootCauses;
+        requiredExpertise = entry.expertise;
+        departmentHints = entry.departments;
         break;
       }
     }
@@ -180,6 +298,9 @@ export class MockAIService {
       aiUrgencyReason,
       priorityScore,
       priorityTier,
+      rootCauseHypotheses,
+      requiredExpertise,
+      departmentHints,
     };
   }
 }

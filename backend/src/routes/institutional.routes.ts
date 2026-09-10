@@ -40,6 +40,19 @@ const createBusinessConceptSchema = z.object({
   currentStage: z.nativeEnum(VentureStage).optional(),
 });
 
+const claimOpportunitySchema = z.object({
+  notes: z.string().trim().optional(),
+  targetBeneficiaries: z.string().trim().optional(),
+});
+
+const createSupportRequestSchema = z.object({
+  requestedFrom: z.nativeEnum(Role, {
+    errorMap: () => ({ message: "Requested from must be one of: ADMIN, UNIVERSITY, INDUSTRY" }),
+  }),
+  requestType: z.string().trim().min(3, "Request type must be at least 3 characters").max(100),
+  details: z.string().trim().min(10, "Details must be at least 10 characters"),
+});
+
 const createCollaborationSchema = z.object({
   supportType: z.nativeEnum(SupportType, {
     errorMap: () => ({ message: "Support type must be one of: MENTORSHIP, TECHNICAL, PROTOTYPING, GENERAL_INTEREST. FUNDING is not permitted." }),
@@ -261,7 +274,7 @@ router.get("/problems/:id/proposals", authenticate, async (req: Request, res: Re
  * Startup role only. Submits a commercial or social business model for solving a civic problem.
  */
 router.post(
-  "/problems/:id/business-concepts",
+  ["/problems/:id/business-concepts", "/problems/:id/concepts"],
   authenticate,
   authorizeRoles(Role.STARTUP),
   async (req: Request, res: Response) => {
@@ -306,7 +319,7 @@ router.post(
         return;
       }
 
-      // Check for duplicate active concept from same startup on same problem
+      // Check if this startup already submitted a concept for this problem
       const existingConcept = await prisma.businessConcept.findFirst({
         where: {
           problemId: id,
@@ -365,6 +378,10 @@ router.post(
           ...concept,
           title,
         },
+        concept: {
+          ...concept,
+          title,
+        },
       });
     } catch (error: any) {
       res.status(500).json({
@@ -377,58 +394,273 @@ router.post(
 );
 
 /**
- * GET /api/problems/:id/business-concepts
+ * GET /api/problems/:id/business-concepts (alias: /api/problems/:id/concepts)
  * Authenticated endpoint to view business concepts for a problem.
  */
-router.get("/problems/:id/business-concepts", authenticate, async (req: Request, res: Response) => {
-  const { id } = req.params;
+router.get(
+  ["/problems/:id/business-concepts", "/problems/:id/concepts"],
+  authenticate,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
 
-  try {
-    const concepts = await prisma.businessConcept.findMany({
-      where: { problemId: id },
-      orderBy: { createdAt: "desc" },
-      include: {
-        startup: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            district: true,
+    try {
+      const concepts = await prisma.businessConcept.findMany({
+        where: { problemId: id },
+        orderBy: { createdAt: "desc" },
+        include: {
+          startup: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              district: true,
+            },
           },
-        },
-        progressUpdates: {
-          orderBy: { createdAt: "desc" },
-          include: {
-            postedBy: {
-              select: {
-                id: true,
-                name: true,
-                role: true,
+          progressUpdates: {
+            orderBy: { createdAt: "desc" },
+            include: {
+              postedBy: {
+                select: {
+                  id: true,
+                  name: true,
+                  role: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    const safeConcepts = concepts.map((c) => ({
-      ...c,
-      title: c.marketSize || c.solutionDescription.slice(0, 60),
-    }));
+      const safeConcepts = concepts.map((c) => ({
+        ...c,
+        title: c.marketSize || c.solutionDescription.slice(0, 60),
+      }));
 
-    res.status(200).json({
-      success: true,
-      count: safeConcepts.length,
-      businessConcepts: safeConcepts,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: "Failed to fetch startup business concepts.",
-      details: error.message,
-    });
+      res.status(200).json({
+        success: true,
+        count: safeConcepts.length,
+        businessConcepts: safeConcepts,
+        concepts: safeConcepts,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: "Failed to fetch startup business concepts.",
+        details: error.message,
+      });
+    }
+  });
+
+/**
+ * POST /api/problems/:id/claims
+ * Startup role only. Claims an opportunity / expresses interest in solving the problem.
+ * Sets initial VentureStage to PROBLEM_CLAIMED.
+ */
+router.post(
+  "/problems/:id/claims",
+  authenticate,
+  authorizeRoles(Role.STARTUP),
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    if (!req.user?.organizationId) {
+      res.status(400).json({
+        success: false,
+        error: "Authenticated user must be associated with a registered startup organization.",
+      });
+      return;
+    }
+
+    const parseResult = claimOpportunitySchema.safeParse(req.body);
+    const data = parseResult.success ? parseResult.data : {};
+
+    try {
+      const problem = await prisma.problem.findUnique({
+        where: { id },
+      });
+
+      if (!problem) {
+        res.status(404).json({
+          success: false,
+          error: `Problem with ID ${id} not found.`,
+        });
+        return;
+      }
+
+      if (problem.filterStatus !== FilterStatus.PASSED) {
+        res.status(400).json({
+          success: false,
+          error: `Problem cannot be claimed because its filterStatus is ${problem.filterStatus}. Only PASSED problems in the Problem Bank are claimable.`,
+        });
+        return;
+      }
+
+      const existing = await prisma.businessConcept.findFirst({
+        where: {
+          problemId: id,
+          startupId: req.user.organizationId,
+        },
+      });
+
+      if (existing) {
+        res.status(400).json({
+          success: false,
+          error: "Your startup has already claimed or submitted a concept for this opportunity.",
+        });
+        return;
+      }
+
+      const claim = await prisma.businessConcept.create({
+        data: {
+          problemId: id,
+          startupId: req.user.organizationId,
+          solutionDescription:
+            data.notes || "Startup expressed interest in exploring a commercial/social civic solution.",
+          targetBeneficiaries:
+            data.targetBeneficiaries || `Citizens and local community members in ${problem.district}`,
+          marketSize: "Initial Opportunity Claim",
+          businessModel: "To be formulated during solution design phase",
+          revenueModel: "To be determined",
+          sustainabilityModel: "Local community and municipal alignment",
+          currentStage: VentureStage.PROBLEM_CLAIMED,
+        },
+        include: {
+          problem: {
+            select: {
+              id: true,
+              title: true,
+              category: true,
+              district: true,
+            },
+          },
+        },
+      });
+
+      res.status(201).json({
+        success: true,
+        message: "Opportunity claimed successfully.",
+        claim,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: "Failed to claim opportunity.",
+        details: error.message,
+      });
+    }
   }
-});
+);
+
+/**
+ * POST /api/problems/:id/support-requests
+ * Startup role only. Submits a support request for an opportunity.
+ */
+router.post(
+  "/problems/:id/support-requests",
+  authenticate,
+  authorizeRoles(Role.STARTUP),
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    if (!req.user?.organizationId) {
+      res.status(400).json({
+        success: false,
+        error: "Authenticated user must be associated with a registered startup organization.",
+      });
+      return;
+    }
+
+    const parseResult = createSupportRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation error",
+        details: parseResult.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const { requestedFrom, requestType, details } = parseResult.data;
+
+    if (
+      requestedFrom !== Role.ADMIN &&
+      requestedFrom !== Role.UNIVERSITY &&
+      requestedFrom !== Role.INDUSTRY
+    ) {
+      res.status(400).json({
+        success: false,
+        error: "Support requests must be directed to Government (ADMIN), UNIVERSITY, or INDUSTRY.",
+      });
+      return;
+    }
+
+    try {
+      const concept = await prisma.businessConcept.findFirst({
+        where: {
+          problemId: id,
+          startupId: req.user.organizationId,
+        },
+      });
+
+      if (!concept) {
+        res.status(404).json({
+          success: false,
+          error: "No active business concept or claim exists for your startup on this problem. Please claim or submit a concept first.",
+        });
+        return;
+      }
+
+      const supportRequest = await prisma.supportRequest.create({
+        data: {
+          businessConceptId: concept.id,
+          problemId: id,
+          requestedFrom,
+          requestType,
+          details,
+          status: "PENDING",
+        },
+        include: {
+          problem: {
+            select: {
+              id: true,
+              title: true,
+              district: true,
+            },
+          },
+          businessConcept: {
+            select: {
+              id: true,
+              solutionDescription: true,
+              currentStage: true,
+            },
+          },
+        },
+      });
+
+      if (
+        concept.currentStage === VentureStage.PROBLEM_CLAIMED ||
+        concept.currentStage === VentureStage.CONCEPT_SUBMITTED
+      ) {
+        await prisma.businessConcept.update({
+          where: { id: concept.id },
+          data: { currentStage: VentureStage.SUPPORT_REQUESTED },
+        });
+      }
+
+      res.status(201).json({
+        success: true,
+        message: "Support request submitted successfully.",
+        supportRequest,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: "Failed to submit support request.",
+        details: error.message,
+      });
+    }
+  }
+);
 
 // =============================================================================
 // 3. INDUSTRY COLLABORATIONS
@@ -487,6 +719,22 @@ router.post(
       }
 
       const { supportType, description } = parseResult.data;
+
+      // Prevent duplicate collaborations by the same industry organization on the same problem
+      const existingCollab = await prisma.collaboration.findFirst({
+        where: {
+          problemId: id,
+          industryId: req.user.organizationId,
+        },
+      });
+
+      if (existingCollab) {
+        res.status(400).json({
+          success: false,
+          error: "Your industry organization has already registered a collaboration for this problem.",
+        });
+        return;
+      }
 
       const collaboration = await prisma.collaboration.create({
         data: {

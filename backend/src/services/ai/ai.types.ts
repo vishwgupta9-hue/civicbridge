@@ -1,5 +1,7 @@
 import { FilterStatus, PriorityTier } from "@prisma/client";
 
+export type DuplicateStatus = "likely_duplicate" | "potentially_related" | "distinct";
+
 export interface AIAnalysisResult {
   filterStatus: FilterStatus;
   filterReason: string;
@@ -16,7 +18,16 @@ export interface AIAnalysisResult {
   aiUrgencyReason: string;
   priorityScore: number;        // (S*0.25)+(A*0.25)+(F*0.15)+(E*0.15)+(U*0.20)
   priorityTier: PriorityTier;   // HIGH (70-100) | MEDIUM (40-69.9) | LOW (0-39.9)
+
+  // Problem DNA & Root Cause Analysis
+  rootCauseHypotheses: string[];
+  requiredExpertise: string[];
+  departmentHints: string[];
+
+  // Advisory Duplicate Detection
   isDuplicate: boolean;
   duplicateSimilarity: number | null;
   similarProblemIds: string[];
+  duplicateStatus: DuplicateStatus;
+  duplicateCandidateTitle?: string | null;
 }

@@ -6,6 +6,10 @@ import { LoginPage } from "./pages/LoginPage";
 import { ReportProblemPage } from "./pages/ReportProblemPage";
 import { ProblemBankPage } from "./pages/ProblemBankPage";
 import { ProblemDetailsPage } from "./pages/ProblemDetailsPage";
+import { ProjectDetailsPage } from "./pages/ProjectDetailsPage";
+import { ResourceExchangePage } from "./pages/ResourceExchangePage";
+import { CollaborationDetailsPage } from "./pages/CollaborationDetailsPage";
+import { PilotDetailsPage } from "./pages/PilotDetailsPage";
 import { CitizenDashboard } from "./pages/dashboards/CitizenDashboard";
 import { AdminDashboard } from "./pages/dashboards/AdminDashboard";
 import { UniversityDashboard } from "./pages/dashboards/UniversityDashboard";
@@ -70,6 +74,46 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute allowedRoles={["CITIZEN", "ADMIN", "UNIVERSITY", "INDUSTRY", "STARTUP"]}>
                 <ProblemDetailsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* V3 Solution Project Dossier */}
+          <Route
+            path="/projects/:id"
+            element={
+              <ProtectedRoute allowedRoles={["CITIZEN", "ADMIN", "UNIVERSITY", "INDUSTRY", "STARTUP"]}>
+                <ProjectDetailsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* V3 Resource Exchange (Needs & Offers) */}
+          <Route
+            path="/exchange"
+            element={
+              <ProtectedRoute allowedRoles={["CITIZEN", "ADMIN", "UNIVERSITY", "INDUSTRY", "STARTUP"]}>
+                <ResourceExchangePage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* V3 Institutional Collaboration */}
+          <Route
+            path="/collaborations/:id"
+            element={
+              <ProtectedRoute allowedRoles={["CITIZEN", "ADMIN", "UNIVERSITY", "INDUSTRY", "STARTUP"]}>
+                <CollaborationDetailsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* V3 Field Pilot Execution & Measured Outcome */}
+          <Route
+            path="/pilots/:id"
+            element={
+              <ProtectedRoute allowedRoles={["CITIZEN", "ADMIN", "UNIVERSITY", "INDUSTRY", "STARTUP"]}>
+                <PilotDetailsPage />
               </ProtectedRoute>
             }
           />

@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { Role, ProblemStatus, FilterStatus, VerificationStatus, PriorityTier } from "@prisma/client";
 import prisma from "../lib/prisma.js";
-import { authenticate } from "../middleware/auth.middleware.js";
+import { authenticate, optionalAuthenticate } from "../middleware/auth.middleware.js";
 import { authorizeRoles } from "../middleware/role.middleware.js";
 
 import { aiService } from "../services/ai/ai.service.js";
@@ -34,7 +34,7 @@ export const createProblemSchema = z.object({
   latitude: z.number().optional().nullable(),
   longitude: z.number().optional().nullable(),
   affectedCount: z.coerce.number().int().min(1, "Affected count must be at least 1").optional().default(1),
-  evidenceUrl: z.string().trim().url("Invalid URL format for evidence").optional().nullable().or(z.literal("")),
+  evidenceUrl: z.string().trim().optional().nullable(),
 });
 
 /**
@@ -44,7 +44,7 @@ export const createProblemSchema = z.object({
  * Only returns problems that have passed AI relevance screening (filterStatus = PASSED).
  * Government verification is an advisory trust signal and NOT required for visibility.
  */
-router.get("/", authenticate, async (req: Request, res: Response) => {
+router.get("/", optionalAuthenticate, async (req: Request, res: Response) => {
   try {
     const {
       district,
@@ -159,6 +159,149 @@ router.get("/", authenticate, async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch Problem Bank problems.",
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/problems/mine
+ * Authenticated endpoint for citizens to retrieve their own reported problems.
+ * User identity is strictly derived from the verified JWT (req.user.id).
+ * Includes AI analysis, validation audit, and institutional solution counts.
+ */
+router.get("/mine", authenticate, async (req: Request, res: Response) => {
+  try {
+    const problems = await prisma.problem.findMany({
+      where: {
+        submittedById: req.user!.id,
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        aiAnalysis: {
+          select: {
+            id: true,
+            predictedCategory: true,
+            confidenceScore: true,
+            aiSummary: true,
+            severityScore: true,
+            affectedPeopleScore: true,
+            frequencyScore: true,
+            evidenceScore: true,
+            urgencyScore: true,
+            aiUrgencyScore: true,
+            aiUrgencyReason: true,
+            isDuplicate: true,
+            duplicateSimilarity: true,
+          },
+        },
+        validation: {
+          select: {
+            id: true,
+            decision: true,
+            remarks: true,
+            reviewedAt: true,
+            severityScore: true,
+            affectedScore: true,
+            frequencyScore: true,
+            evidenceScore: true,
+            urgencyScore: true,
+            reviewedBy: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+                district: true,
+              },
+            },
+          },
+        },
+        proposals: {
+          select: {
+            id: true,
+            status: true,
+            deliverables: true,
+            proposedApproach: true,
+            createdAt: true,
+            university: {
+              select: {
+                id: true,
+                name: true,
+                district: true,
+              },
+            },
+            progressUpdates: {
+              orderBy: { createdAt: "desc" },
+              take: 3,
+              select: {
+                id: true,
+                updateText: true,
+                milestoneTitle: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
+        businessConcepts: {
+          select: {
+            id: true,
+            currentStage: true,
+            solutionDescription: true,
+            createdAt: true,
+            startup: {
+              select: {
+                id: true,
+                name: true,
+                district: true,
+              },
+            },
+            progressUpdates: {
+              orderBy: { createdAt: "desc" },
+              take: 3,
+              select: {
+                id: true,
+                updateText: true,
+                milestoneTitle: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
+        collaborations: {
+          select: {
+            id: true,
+            supportType: true,
+            message: true,
+            status: true,
+            createdAt: true,
+            industry: {
+              select: {
+                id: true,
+                name: true,
+                district: true,
+              },
+            },
+          },
+        },
+        _count: {
+          select: {
+            proposals: true,
+            businessConcepts: true,
+            collaborations: true,
+          },
+        },
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      count: problems.length,
+      problems,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch citizen's reported problems.",
       details: error.message,
     });
   }
@@ -307,10 +450,49 @@ router.post("/:id/process-ai", authenticate, async (req: Request, res: Response)
 });
 
 /**
+ * POST /api/problems/:id/request-verification
+ * Allows submitting citizen or admin to request official government verification review.
+ */
+router.post("/:id/request-verification", authenticate, async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const problem = await prisma.problem.findUnique({ where: { id } });
+    if (!problem) {
+      res.status(404).json({ success: false, error: `Problem with ID ${id} not found.` });
+      return;
+    }
+
+    const isOwner = problem.submittedById === req.user!.id;
+    const isAdmin = req.user!.role === Role.ADMIN;
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ success: false, error: "Only the submitting citizen or an administrator can request government verification." });
+      return;
+    }
+
+    const updated = await prisma.problem.update({
+      where: { id },
+      data: { verificationRequested: true },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Government verification review requested.",
+      problem: updated,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to request government verification.",
+    });
+  }
+});
+
+/**
  * GET /api/problems/:id
  * Retrieve problem details along with AI analysis and verification data.
  */
-router.get("/:id", authenticate, async (req: Request, res: Response) => {
+router.get("/:id", optionalAuthenticate, async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {

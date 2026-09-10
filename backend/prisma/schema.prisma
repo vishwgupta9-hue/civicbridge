@@ -28,9 +28,10 @@ enum Role {
   STARTUP
 }
 
-/// Institutional entity type. Separate from Role to avoid misuse of the full
-/// Role enum (CITIZEN and ADMIN are not valid Organization types).
+/// Institutional entity type. Separate from Role.
+/// Extended in V3 to include GOVERNMENT for public departments/administrations.
 enum OrganizationType {
+  GOVERNMENT
   UNIVERSITY
   INDUSTRY
   STARTUP
@@ -40,74 +41,171 @@ enum OrganizationType {
 /// Formula: (Severity×0.25) + (AffectedPeople×0.25) + (Frequency×0.15) + (Evidence×0.15) + (Urgency×0.20)
 /// All five factors are normalized to 0–100 before applying weights.
 enum PriorityTier {
-  LOW    // priorityScore 0.0 – 39.9
+  LOW // priorityScore 0.0 – 39.9
   MEDIUM // priorityScore 40.0 – 69.9
-  HIGH   // priorityScore 70.0 – 100.0
+  HIGH // priorityScore 70.0 – 100.0
 }
 
 /// Parallel government trust signal. NOT a visibility or participation gate.
 /// All problems with filterStatus = PASSED are visible to institutions
 /// regardless of their verificationStatus.
 enum VerificationStatus {
-  AI_SCREENED         // Default upon passing AI relevance filter
+  AI_SCREENED // Default upon passing AI relevance filter
   GOVERNMENT_VERIFIED // Government reviewed and confirmed
-  DECLINED_BY_GOVT    // Government reviewed but declined (problem remains active)
+  DECLINED_BY_GOVT // Government reviewed but declined (problem remains active)
 }
 
 /// Problem-solving lifecycle (independent of VerificationStatus and PriorityTier).
 /// Child statuses (Proposal, BusinessConcept, Collaboration) do NOT automatically
 /// promote or demote this status.
 enum ProblemStatus {
-  OPEN        // Live in Problem Bank; institutions can act on it
+  OPEN // Live in Problem Bank; institutions can act on it
   IN_PROGRESS // Active student project or startup venture underway
-  RESOLVED    // Completed solution delivered and confirmed
-  CLOSED      // Archived
+  RESOLVED // Completed solution delivered and confirmed
+  CLOSED // Archived
 }
 
 /// AI relevance screening result for a submitted problem.
 /// PENDING is the safe default: a problem is NOT visible to institutions until
 /// the AI pipeline explicitly sets this to PASSED.
 enum FilterStatus {
-  PENDING  // Initial state: AI screening not yet completed — problem NOT visible
-  PASSED   // AI screening passed — problem enters Problem Bank and is visible
+  PENDING // Initial state: AI screening not yet completed — problem NOT visible
+  PASSED // AI screening passed — problem enters Problem Bank and is visible
   REJECTED // AI screening failed — problem not visible in Problem Bank
-  FLAGGED  // Requires manual admin review before entering Problem Bank
+  FLAGGED // Requires manual admin review before entering Problem Bank
 }
 
 /// Type of institutional support offered by industry to a startup/problem.
 /// NOTE: FUNDING is explicitly excluded per product decision.
 enum SupportType {
-  MENTORSHIP       // Expertise and guidance
-  TECHNICAL        // Technical resources, tools, infrastructure
-  PROTOTYPING      // Lab access, manufacturing, testing
+  MENTORSHIP // Expertise and guidance
+  TECHNICAL // Technical resources, tools, infrastructure
+  PROTOTYPING // Lab access, manufacturing, testing
   GENERAL_INTEREST // Expressing broad interest without specific commitment
 }
 
 /// Stages in a startup's venture journey on a claimed problem.
 enum VentureStage {
-  PROBLEM_CLAIMED   // Startup has claimed / expressed interest in the problem
+  PROBLEM_CLAIMED // Startup has claimed / expressed interest in the problem
   CONCEPT_SUBMITTED // BusinessConcept record submitted
   SUPPORT_REQUESTED // Startup has filed one or more SupportRequests
-  SUPPORT_GRANTED   // At least one SupportRequest approved
-  BUILDING          // Active development / solution building
-  PILOTED           // Pilot or proof-of-concept delivered
+  SUPPORT_GRANTED // At least one SupportRequest approved
+  BUILDING // Active development / solution building
+  PILOTED // Pilot or proof-of-concept delivered
 }
 
 /// University proposal lifecycle. Independent of Problem.status.
 enum ProposalStatus {
-  SUBMITTED    // Proposal submitted by university; awaiting admin review
+  SUBMITTED // Proposal submitted by university; awaiting admin review
   UNDER_REVIEW // Admin is reviewing the proposal
-  ACCEPTED     // Proposal accepted; work can begin
-  IN_PROGRESS  // Active work underway
-  COMPLETED    // Deliverables submitted and confirmed
-  WITHDRAWN    // University withdrew the proposal
+  ACCEPTED // Proposal accepted; work can begin
+  IN_PROGRESS // Active work underway
+  COMPLETED // Deliverables submitted and confirmed
+  WITHDRAWN // University withdrew the proposal
 }
 
-/// Industry collaboration lifecycle status. Independent of Problem.status.
+/// Collaboration lifecycle status. Independent of Problem.status.
+/// Upgraded in V3 to support the structured commitment model.
 enum CollaborationStatus {
+  // Legacy V2 statuses
   INTERESTED // Initial expression of interest / offer submitted
-  ACTIVE     // Collaboration actively underway
-  COMPLETED  // Collaboration concluded
+  ACTIVE // Collaboration actively underway
+  COMPLETED // Collaboration concluded
+
+  // V3 structured commitment statuses
+  PROPOSED
+  ACCEPTED
+  IN_PROGRESS
+  DELIVERED
+  CONFIRMED
+  DECLINED
+  CANCELLED
+}
+
+/// V3 Project execution track type.
+enum ProjectTrack {
+  ACADEMIC_RESEARCH // University / R&D led
+  COMMERCIAL_VENTURE // Startup / Business builder led
+  CIVIC_INITIATIVE // Community / NGO / Multi-stakeholder led
+}
+
+/// V3 Project lifecycle status.
+enum ProjectStatus {
+  PLANNING
+  BUILDING
+  PILOTING
+  COMPLETED
+  ABANDONED
+}
+
+/// V3 Structured Milestone status.
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  VERIFIED
+}
+
+/// V3 Universal Offer and Need category.
+enum OfferCategory {
+  LAB_EQUIPMENT
+  TESTING_ANALYSIS
+  MANUFACTURING_FABRICATION
+  FACILITY_SITE_ACCESS
+  DOMAIN_EXPERTISE_MENTORSHIP
+  HARDWARE_COMPONENTS
+}
+
+/// V3 Need urgency tier.
+enum NeedUrgency {
+  STANDARD
+  CRITICAL_PATH
+}
+
+/// V3 Need resolution status.
+enum NeedStatus {
+  OPEN
+  COMMITTED
+  FULFILLED
+  CANCELLED
+}
+
+/// V3 Field pilot lifecycle status.
+enum PilotStatus {
+  PROPOSED
+  PREPARATION
+  ACTIVE_ON_GROUND
+  EVALUATION
+  CONCLUDED
+}
+
+/// V3 Government administrative clearance workflow status (never auto-granted).
+enum ClearanceStatus {
+  NOT_REQUIRED
+  REQUIRED
+  REQUESTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  NEEDS_MORE_INFO
+  GRANTED
+  DECLINED
+}
+
+/// V3 Pilot verification finding.
+enum VerificationFinding {
+  SUCCESS_CONFIRMED
+  PARTIAL_IMPROVEMENT
+  NO_CHANGE
+  FAILED
+}
+
+/// V3 Evidence documentation type.
+enum EvidenceType {
+  PHOTO_GEOTAG
+  LAB_REPORT
+  SENSOR_DATASET
+  WRITTEN_INSPECTION
 }
 
 // =============================================================================
@@ -116,9 +214,9 @@ enum CollaborationStatus {
 
 /// All authenticated users across all five roles.
 model User {
-  id           String  @id @default(uuid())
+  id           String @id @default(uuid())
   name         String
-  email        String  @unique
+  email        String @unique
   passwordHash String
   role         Role
 
@@ -126,15 +224,21 @@ model User {
   phone    String?
   district String?
 
-  // Institutional link (only for UNIVERSITY, INDUSTRY, STARTUP roles)
+  // Institutional link (for UNIVERSITY, INDUSTRY, STARTUP, and GOVERNMENT/ADMIN roles)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
 
   // Relations
-  problems              Problem[]       @relation("CitizenProblems")
-  validations           Validation[]    @relation("AdminValidations")
-  verifiedProblems      Problem[]       @relation("AdminVerifications")
-  progressUpdates       ProgressUpdate[]
+  problems         Problem[]        @relation("CitizenProblems")
+  validations      Validation[]     @relation("AdminValidations")
+  verifiedProblems Problem[]        @relation("AdminVerifications")
+  progressUpdates  ProgressUpdate[]
+
+  // V3 Pilot & Verification relations
+  clearedPilots      PilotDeployment[]   @relation("AdminPilotClearances")
+  recordedMetrics    PilotMetric[]       @relation("RecordedMetrics")
+  verifiedMetrics    PilotMetric[]       @relation("VerifiedMetrics")
+  pilotVerifications PilotVerification[] @relation("UserPilotVerifications")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -143,16 +247,14 @@ model User {
   @@index([email])
 }
 
-/// Institutional entity representing a University, Industry, or Startup.
-/// Uses OrganizationType (not Role) to prevent CITIZEN / ADMIN from being
-/// used as an organization type.
+/// Institutional entity representing Government, University, Industry, or Startup.
 model Organization {
   id   String           @id @default(uuid())
   name String
-  type OrganizationType // UNIVERSITY, INDUSTRY, or STARTUP only
+  type OrganizationType // GOVERNMENT, UNIVERSITY, INDUSTRY, or STARTUP
 
   // Registration / identification codes
-  regCode String? // AICTE/UGC for University; CIN for Industry; DPIIT for Startup
+  regCode String? // AICTE/UGC for University; CIN for Industry; DPIIT for Startup; Dept Code for Govt
 
   // Domain and expertise tags used for AI matching
   domainTags    String[]
@@ -167,7 +269,18 @@ model Organization {
   users            User[]
   proposals        Proposal[]
   businessConcepts BusinessConcept[]
-  collaborations   Collaboration[]
+  collaborations   Collaboration[]   @relation("IndustryCollaborations")
+
+  // V3 Relations
+  projects               Project[]
+  offers                 Offer[]
+  needs                  Need[]
+  providedCollaborations Collaboration[] @relation("ProvidedCollaborations")
+  receivedCollaborations Collaboration[] @relation("ReceivedCollaborations")
+  verifiedMilestones     Milestone[]     @relation("MilestoneVerifications")
+
+  responsiblePilots  PilotDeployment[]   @relation("ResponsiblePilots")
+  pilotVerifications PilotVerification[] @relation("OrgPilotVerifications")
 
   createdAt DateTime @default(now())
 
@@ -183,17 +296,17 @@ model Organization {
 /// verificationStatus is a parallel trust signal only. It does NOT control
 /// whether institutions can view or act on a problem.
 model Problem {
-  id           String  @id @default(uuid())
-  title        String
-  description  String  @db.Text
-  category     String  // e.g. "Water & Sanitation", "Rural Roads", "Education"
-  subCategory  String?
-  district     String  // One of 24 Jharkhand districts
-  locationText String?
-  latitude     Float?
-  longitude    Float?
-  affectedCount Int    @default(1)
-  evidenceUrl  String? // Photo or PDF storage URL
+  id            String  @id @default(uuid())
+  title         String
+  description   String  @db.Text
+  category      String // e.g. "Water & Sanitation", "Rural Roads", "Education"
+  subCategory   String?
+  district      String // One of 24 Jharkhand districts
+  locationText  String?
+  latitude      Float?
+  longitude     Float?
+  affectedCount Int     @default(1)
+  evidenceUrl   String? // Photo or PDF storage URL
 
   // --- Solution Lifecycle (independent of verification and priority) ---
   status ProblemStatus @default(OPEN)
@@ -214,7 +327,7 @@ model Problem {
   verificationStatus    VerificationStatus @default(AI_SCREENED)
   verificationNotes     String?            @db.Text
   verifiedAt            DateTime?
-  verifiedById          String?            // FK to User (Admin who verified)
+  verifiedById          String? // FK to User (Admin who verified)
   verifiedBy            User?              @relation("AdminVerifications", fields: [verifiedById], references: [id])
   verificationRequested Boolean            @default(false)
 
@@ -229,6 +342,8 @@ model Problem {
   businessConcepts BusinessConcept[]
   collaborations   Collaboration[]
   supportRequests  SupportRequest[]
+  projectProblems  ProjectProblem[]
+  pilots           PilotDeployment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -256,31 +371,36 @@ model AIAnalysis {
 
   // AI classification
   predictedCategory String
-  confidenceScore   Float  // 0.0 – 1.0 (AI's classification confidence)
+  confidenceScore   Float // 0.0 – 1.0 (AI's classification confidence)
 
   // AI narrative output
   aiSummary String @db.Text
 
   // --- Five normalized priority factor scores (0–100 each) ---
   // Used to compute: (Severity×0.25)+(AffectedPeople×0.25)+(Frequency×0.15)+(Evidence×0.15)+(Urgency×0.20)
-  severityScore      Int // Weight: 25% — how harmful or dangerous the problem is
+  severityScore       Int // Weight: 25% — how harmful or dangerous the problem is
   affectedPeopleScore Int // Weight: 25% — scale of population affected
-  frequencyScore     Int // Weight: 15% — how often the problem occurs
-  evidenceScore      Int // Weight: 15% — quality and quantity of supporting evidence
-  urgencyScore       Int // Weight: 20% — normalized urgency (0–100, derived from aiUrgencyScore)
+  frequencyScore      Int // Weight: 15% — how often the problem occurs
+  evidenceScore       Int // Weight: 15% — quality and quantity of supporting evidence
+  urgencyScore        Int // Weight: 20% — normalized urgency (0–100, derived from aiUrgencyScore)
 
   // Raw AI urgency signal (1–10 scale from LLM output), retained for auditability.
   // Stored separately for auditability. urgencyScore above is the normalized 0–100 version.
-  aiUrgencyScore  Int    // 1 – 10 (raw LLM urgency assessment)
+  aiUrgencyScore  Int // 1 – 10 (raw LLM urgency assessment)
   aiUrgencyReason String @db.Text
 
   // --- Duplicate Detection ---
   isDuplicate         Boolean  @default(false)
-  duplicateSimilarity Float?   // Cosine similarity score of the closest match (0.0–1.0)
+  duplicateSimilarity Float? // Cosine similarity score of the closest match (0.0–1.0)
   similarProblemIds   String[] // UUIDs of potential duplicate problems
 
   // pgvector embedding for semantic search and duplicate detection (1536-dim, e.g. text-embedding-3-small)
   embedding Unsupported("vector(1536)")?
+
+  // --- Problem DNA & Root-Cause Hypotheses ---
+  rootCauseHypotheses String[] @default([])
+  requiredExpertise   String[] @default([])
+  departmentHints     String[] @default([])
 
   createdAt DateTime @default(now())
 }
@@ -316,19 +436,19 @@ model Validation {
 /// Multiple proposals can exist for the same problem (different universities).
 /// ProposalStatus is independent of Problem.status.
 model Proposal {
-  id           String         @id @default(uuid())
+  id           String       @id @default(uuid())
   problemId    String
-  problem      Problem        @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  problem      Problem      @relation(fields: [problemId], references: [id], onDelete: Cascade)
   universityId String
-  university   Organization   @relation(fields: [universityId], references: [id])
+  university   Organization @relation(fields: [universityId], references: [id])
 
   facultyMentor    String
-  teamMembers      Json           // [{ name, email, rollNo, role }]
-  proposedApproach String         @db.Text
-  deliverables     String         @db.Text
+  teamMembers      Json // [{ name, email, rollNo, role }]
+  proposedApproach String   @db.Text
+  deliverables     String   @db.Text
   timelineStart    DateTime
   timelineEnd      DateTime
-  milestones       Json           // [{ title, deadline, status }]
+  milestones       Json // [{ title, deadline, status }]
   budgetRequired   Float?
 
   // Proposal's own lifecycle (independent of Problem.status)
@@ -348,18 +468,18 @@ model Proposal {
 /// Multiple concepts can exist for the same problem simultaneously.
 /// VentureStage is independent of Problem.status.
 model BusinessConcept {
-  id        String         @id @default(uuid())
+  id        String       @id @default(uuid())
   problemId String
-  problem   Problem        @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  problem   Problem      @relation(fields: [problemId], references: [id], onDelete: Cascade)
   startupId String
-  startup   Organization   @relation(fields: [startupId], references: [id])
+  startup   Organization @relation(fields: [startupId], references: [id])
 
-  solutionDescription String @db.Text
-  targetBeneficiaries String @db.Text
+  solutionDescription String  @db.Text
+  targetBeneficiaries String  @db.Text
   marketSize          String?
-  businessModel       String @db.Text
-  revenueModel        String @db.Text
-  sustainabilityModel String @db.Text
+  businessModel       String  @db.Text
+  revenueModel        String  @db.Text
+  sustainabilityModel String  @db.Text
 
   // Venture's own lifecycle stage (independent of Problem.status)
   currentStage VentureStage @default(PROBLEM_CLAIMED)
@@ -383,7 +503,7 @@ model SupportRequest {
   problemId         String
   problem           Problem         @relation(fields: [problemId], references: [id])
 
-  requestedFrom Role   // ADMIN (Government), UNIVERSITY, or INDUSTRY
+  requestedFrom Role // ADMIN (Government), UNIVERSITY, or INDUSTRY
   requestType   String // "Mentorship", "Lab Testing", "Scheme Referral", etc.
   details       String @db.Text
 
@@ -394,50 +514,70 @@ model SupportRequest {
   createdAt DateTime @default(now())
 }
 
-/// Industry collaboration offer or expression of interest on a problem.
-/// Multiple industries can collaborate on the same problem simultaneously.
-/// Status is independent of Problem.status.
+/// Collaboration model upgraded for V3 structured commitments.
+/// Preserves legacy V2 fields for seamless backwards compatibility.
 model Collaboration {
-  id         String         @id @default(uuid())
-  problemId  String
-  problem    Problem        @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  industryId String
-  industry   Organization   @relation(fields: [industryId], references: [id])
+  id String @id @default(uuid())
 
-  supportType SupportType // MENTORSHIP | TECHNICAL | PROTOTYPING | GENERAL_INTEREST
-  message     String      @db.Text
+  // --- V3 Structured Commitment Fields ---
+  needId         String?
+  need           Need?         @relation(fields: [needId], references: [id], onDelete: SetNull)
+  offerId        String?
+  offer          Offer?        @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  providerOrgId  String?
+  providerOrg    Organization? @relation("ProvidedCollaborations", fields: [providerOrgId], references: [id])
+  recipientOrgId String?
+  recipientOrg   Organization? @relation("ReceivedCollaborations", fields: [recipientOrgId], references: [id])
+  projectId      String?
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  // Collaboration's own status (independent of Problem.status)
+  contributionScope      String?   @db.Text
+  expectedCompletionDate DateTime?
+  proofDocumentUrl       String?
+  completionNotes        String?   @db.Text
+  completedAt            DateTime?
+
+  // --- Legacy V2 Fields (preserved with non-null constraints for V2 compatibility) ---
+  problemId   String?
+  problem     Problem?      @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  industryId  String?
+  industry    Organization? @relation("IndustryCollaborations", fields: [industryId], references: [id])
+  supportType SupportType?  @default(GENERAL_INTEREST)
+  message     String?       @default("") @db.Text
+
   status CollaborationStatus @default(INTERESTED)
 
-  createdAt DateTime @default(now())
+  milestones      Milestone[]
+  progressUpdates ProgressUpdate[]
 
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+
+  @@index([needId])
+  @@index([offerId])
+  @@index([providerOrgId])
+  @@index([recipientOrgId])
+  @@index([projectId])
   @@index([problemId])
   @@index([industryId])
   @@index([status])
 }
 
-/// Progress update log for a Proposal or BusinessConcept.
-///
-/// XOR constraint: a ProgressUpdate must belong to EXACTLY ONE parent.
-/// proposalId and businessConceptId cannot both be NULL (orphan) or both be
-/// populated (ambiguous). This is enforced by the database CHECK constraint below.
-///
-/// NOTE: The following CHECK constraint is applied in the initial migration SQL
-/// and is NOT natively expressible in Prisma schema syntax:
-///
-///   ALTER TABLE "ProgressUpdate"
-///   ADD CONSTRAINT "progress_update_xor_parent"
-///   CHECK (
-///     ("proposalId" IS NOT NULL AND "businessConceptId" IS NULL) OR
-///     ("proposalId" IS NULL AND "businessConceptId" IS NOT NULL)
-///   );
+/// Progress update log for a Proposal, BusinessConcept, or V3 Project / Milestone / Collaboration.
 model ProgressUpdate {
   id                String           @id @default(uuid())
   proposalId        String?
   proposal          Proposal?        @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   businessConceptId String?
   businessConcept   BusinessConcept? @relation(fields: [businessConceptId], references: [id], onDelete: Cascade)
+
+  // V3 Project & Milestone & Collaboration relations
+  projectId       String?
+  project         Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestoneId     String?
+  milestone       Milestone?      @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  collaborationId String?
+  collaboration   Collaboration?  @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
 
   updateText     String  @db.Text
   milestoneTitle String?
@@ -447,4 +587,242 @@ model ProgressUpdate {
   postedBy   User   @relation(fields: [postedById], references: [id])
 
   createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@index([milestoneId])
+  @@index([collaborationId])
+}
+
+// =============================================================================
+// V3 DOMAIN MODELS (Projects, Milestones, Needs, Offers, Pilots, Verifications)
+// =============================================================================
+
+/// V3 Project: The unified execution container replacing separate Proposal / BusinessConcept.
+model Project {
+  id                String        @id @default(uuid())
+  title             String
+  executiveSummary  String        @db.Text
+  technicalApproach String        @db.Text
+  trackType         ProjectTrack
+  status            ProjectStatus @default(PLANNING)
+
+  leadOrgId String
+  leadOrg   Organization @relation(fields: [leadOrgId], references: [id])
+
+  // Structured metadata per track (Academic: mentor, student team; Commercial: business/revenue model)
+  trackMetadata Json?
+
+  // Relations
+  problems        ProjectProblem[]
+  milestones      Milestone[]
+  needs           Need[]
+  collaborations  Collaboration[]
+  pilots          PilotDeployment[]
+  progressUpdates ProgressUpdate[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leadOrgId])
+  @@index([trackType])
+  @@index([status])
+}
+
+/// Explicit join model for Many-to-Many Project ↔ Problem relationship.
+/// Enables a Project to address multiple clustered problems across wards/districts.
+model ProjectProblem {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  problemId String
+  problem   Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  isPrimary Boolean  @default(true)
+  linkedAt  DateTime @default(now())
+
+  @@unique([projectId, problemId])
+  @@index([projectId])
+  @@index([problemId])
+}
+
+/// V3 Structured Milestone: Relational tracking with deadlines, deliverables, and verifications.
+model Milestone {
+  id               String          @id @default(uuid())
+  projectId        String?
+  project          Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  collaborationId  String?
+  collaboration    Collaboration?  @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
+  title            String
+  description      String          @db.Text
+  responsibleParty String?
+  targetDate       DateTime
+  status           MilestoneStatus @default(PENDING)
+
+  deliverableUrl  String?
+  verifiedByOrgId String?
+  verifiedByOrg   Organization? @relation("MilestoneVerifications", fields: [verifiedByOrgId], references: [id])
+  verifiedAt      DateTime?
+
+  needs           Need[]
+  progressUpdates ProgressUpdate[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([collaborationId])
+  @@index([status])
+}
+
+/// V3 Universal Offer: Any Organization (Gov, Uni, Startup, Industry) can publish capabilities.
+model Offer {
+  id             String        @id @default(uuid())
+  providerOrgId  String
+  providerOrg    Organization  @relation(fields: [providerOrgId], references: [id])
+  category       OfferCategory
+  title          String
+  specifications String        @db.Text
+  district       String? // Specific district or "STATEWIDE"
+  capacityTerms  String?       @db.Text
+  status         String        @default("ACTIVE") // ACTIVE | PAUSED | ARCHIVED
+
+  collaborations Collaboration[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([providerOrgId])
+  @@index([category])
+  @@index([district])
+  @@index([status])
+}
+
+/// V3 Need: Demand for resources, equipment, testing, or site access.
+/// Can exist independently or optionally attach to a Project / Milestone.
+model Need {
+  id           String       @id @default(uuid())
+  creatorOrgId String
+  creatorOrg   Organization @relation(fields: [creatorOrgId], references: [id])
+  projectId    String?
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestoneId  String?
+  milestone    Milestone?   @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+
+  category OfferCategory
+  title    String
+  details  String        @db.Text
+  district String?
+  urgency  NeedUrgency   @default(STANDARD)
+  status   NeedStatus    @default(OPEN)
+
+  collaborations Collaboration[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([creatorOrgId])
+  @@index([projectId])
+  @@index([milestoneId])
+  @@index([category])
+  @@index([status])
+}
+
+/// V3 Field Pilot Deployment: Physical testbed on the ground.
+model PilotDeployment {
+  id                     String    @id @default(uuid())
+  projectId              String
+  project                Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  problemId              String?
+  problem                Problem?  @relation(fields: [problemId], references: [id], onDelete: SetNull)
+  responsibleOrgId       String?
+  responsibleOrg         Organization? @relation("ResponsiblePilots", fields: [responsibleOrgId], references: [id], onDelete: SetNull)
+
+  title                  String
+  description            String?   @db.Text
+  risksRequirements      String?   @db.Text
+  siteLocation           String
+  district               String
+  latitude               Float?
+  longitude              Float?
+  targetBeneficiaryCount Int       @default(0)
+  actualBeneficiaryCount Int?
+  startDate              DateTime?
+  endDate                DateTime?
+  actualStartDate        DateTime?
+  actualEndDate          DateTime?
+
+  // Government administrative clearance workflow (never auto-granted)
+  clearanceStatus      ClearanceStatus @default(NOT_REQUIRED)
+  clearanceDocumentUrl String? // Uploaded official administrative permission letter / NOC
+  clearanceNotes       String?         @db.Text
+  clearanceRequestedAt DateTime?
+  clearanceDecidedAt   DateTime?
+  clearedById          String?
+  clearedBy            User?           @relation("AdminPilotClearances", fields: [clearedById], references: [id])
+
+  status PilotStatus @default(PROPOSED)
+
+  evidenceDocumentUrl String?
+
+  metrics       PilotMetric[]
+  verifications PilotVerification[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([problemId])
+  @@index([responsibleOrgId])
+  @@index([district])
+  @@index([clearanceStatus])
+  @@index([status])
+}
+
+/// V3 Granular Quantitative Metric for Pilots (baseline vs outcome measurements).
+model PilotMetric {
+  id      String          @id @default(uuid())
+  pilotId String
+  pilot   PilotDeployment @relation(fields: [pilotId], references: [id], onDelete: Cascade)
+
+  metricName    String
+  unit          String
+  baselineValue Float
+  targetValue   Float?
+  outcomeValue  Float?
+  status        String          @default("REPORTED") // REPORTED | VERIFIED
+
+  evidenceUrl   String?
+  recordedById  String
+  recordedBy    User            @relation("RecordedMetrics", fields: [recordedById], references: [id])
+  recordedAt    DateTime        @default(now())
+
+  verifiedById  String?
+  verifiedBy    User?           @relation("VerifiedMetrics", fields: [verifiedById], references: [id])
+  verifiedAt    DateTime?
+
+  @@index([pilotId])
+  @@index([status])
+}
+
+/// V3 Qualitative and Multi-Stakeholder Ground-Truth Verification for Pilots.
+model PilotVerification {
+  id      String          @id @default(uuid())
+  pilotId String
+  pilot   PilotDeployment @relation(fields: [pilotId], references: [id], onDelete: Cascade)
+
+  verifierId       String
+  verifier         User          @relation("UserPilotVerifications", fields: [verifierId], references: [id])
+  verificationRole Role?
+  organizationId   String?
+  organization     Organization? @relation("OrgPilotVerifications", fields: [organizationId], references: [id])
+
+  finding      VerificationFinding
+  evidenceType EvidenceType
+  evidenceUrl  String?
+  feedbackText String?             @db.Text
+  verifiedAt   DateTime            @default(now())
+
+  @@index([pilotId])
+  @@index([verifierId])
+  @@index([organizationId])
+  @@index([finding])
 }

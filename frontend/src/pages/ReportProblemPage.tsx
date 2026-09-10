@@ -8,12 +8,19 @@ import {
   CheckCircle2,
   Clock,
   Sparkles,
-  ShieldCheck,
   Send,
-  AlertTriangle,
   XCircle,
-  Copy,
   Info,
+  MapPin,
+  Upload,
+  Camera,
+  Trash2,
+  Crosshair,
+  FileText,
+  ChevronRight,
+  ChevronLeft,
+  Eye,
+  Check,
 } from "lucide-react";
 
 const JHARKHAND_DISTRICTS = [
@@ -34,6 +41,12 @@ const PROBLEM_CATEGORIES = [
   "Civic Infrastructure"
 ];
 
+const FREQUENCY_OPTIONS = [
+  { value: "Constant / Daily", label: "Constant / Daily", desc: "Issue occurs continuously every day" },
+  { value: "Periodic / Weekly", label: "Periodic / Weekly", desc: "Occurs multiple times a week or season" },
+  { value: "One-time / Rare", label: "One-time / Rare", desc: "Single acute incident or recent occurrence" },
+];
+
 interface FormState {
   title: string;
   description: string;
@@ -41,11 +54,14 @@ interface FormState {
   subCategory: string;
   district: string;
   location: string;
+  latitude: number | null;
+  longitude: number | null;
   affectedCount: number;
   evidenceUrl: string;
+  frequency: string;
 }
 
-type SubmissionStage = "FORM" | "SUBMITTING" | "SCREENING" | "RESULT";
+type SubmissionStage = "WIZARD" | "UPLOADING" | "SUBMITTING" | "SCREENING" | "RESULT";
 
 const DEMO_PRESETS = [
   {
@@ -57,8 +73,11 @@ const DEMO_PRESETS = [
       subCategory: "Drinking Water Quality",
       district: "Ranchi",
       location: "Nawagarh Village, Angara Block, Ward 2",
+      latitude: 23.3641,
+      longitude: 85.3322,
       affectedCount: 650,
-      evidenceUrl: "https://storage.civicbridge.jharkhand.gov.in/evidence/fluoride_test_sample.jpg",
+      evidenceUrl: "https://images.unsplash.com/photo-1541888946425-d0fbb18086f6?auto=format&fit=crop&w=600&q=80",
+      frequency: "Constant / Daily",
     },
   },
   {
@@ -67,11 +86,14 @@ const DEMO_PRESETS = [
       title: "Maybe an issue near the highway intersection",
       description: "Someone told me maybe there is an issue with unconfirmed rumors around the road, not sure what happened exactly.",
       category: "Rural Roads & Transport",
-      subCategory: "",
+      subCategory: "Road Maintenance",
       district: "Hazaribagh",
       location: "Near Highway Chowk",
+      latitude: null,
+      longitude: null,
       affectedCount: 5,
       evidenceUrl: "",
+      frequency: "One-time / Rare",
     },
   },
   {
@@ -83,8 +105,11 @@ const DEMO_PRESETS = [
       subCategory: "",
       district: "Ranchi",
       location: "",
+      latitude: null,
+      longitude: null,
       affectedCount: 1,
       evidenceUrl: "",
+      frequency: "One-time / Rare",
     },
   },
 ];
@@ -93,6 +118,9 @@ export const ReportProblemPage: React.FC = () => {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
 
+  // Wizard Step: 1, 2, or 3
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+
   const [formData, setFormData] = useState<FormState>({
     title: "",
     description: "",
@@ -100,67 +128,170 @@ export const ReportProblemPage: React.FC = () => {
     subCategory: "",
     district: "Ranchi",
     location: "",
-    affectedCount: 20,
+    latitude: null,
+    longitude: null,
+    affectedCount: 50,
     evidenceUrl: "",
+    frequency: "Constant / Daily",
   });
 
+  // Photo / File state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+
+  // Submission pipeline stages
+  const [stage, setStage] = useState<SubmissionStage>("WIZARD");
+  const [activeStepText, setActiveStepText] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
-  const [stage, setStage] = useState<SubmissionStage>("FORM");
+
+  // Result state
   const [createdProblem, setCreatedProblem] = useState<any>(null);
   const [aiResult, setAiResult] = useState<any>(null);
-  const [activeStepText, setActiveStepText] = useState<string>("Submitting problem record...");
 
-  const validateForm = (): boolean => {
+  // =========================================================================
+  // FILE HANDLING & VALIDATION
+  // =========================================================================
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGeneralError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // File size check: 5MB
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setGeneralError("Selected file exceeds the 5MB limit. Please choose a smaller photo.");
+      return;
+    }
+
+    // MIME type check
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "application/pdf"];
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      setGeneralError("Invalid file format. Please upload a JPEG, PNG, WebP image or PDF document.");
+      return;
+    }
+
+    setSelectedFile(file);
+
+    // Create thumbnail preview for images
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setFilePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setFilePreview(null);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+  };
+
+  // =========================================================================
+  // GPS GEOLOCATION
+  // =========================================================================
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      setGeneralError("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setIsLocating(true);
+    setGeneralError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = Math.round(position.coords.latitude * 10000) / 10000;
+        const lng = Math.round(position.coords.longitude * 10000) / 10000;
+        setFormData((prev) => ({
+          ...prev,
+          latitude: lat,
+          longitude: lng,
+          location: prev.location ? prev.location : `GPS: ${lat}, ${lng}`,
+        }));
+        setIsLocating(false);
+      },
+      (err) => {
+        setIsLocating(false);
+        setGeneralError(`Could not detect GPS location: ${err.message}`);
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  };
+
+  // =========================================================================
+  // STEP VALIDATION
+  // =========================================================================
+  const validateStep1 = () => {
     const errors: Record<string, string> = {};
-
-    if (!formData.title.trim() || formData.title.trim().length < 5) {
+    if (!formData.title.trim()) {
+      errors.title = "Problem title is required.";
+    } else if (formData.title.trim().length < 5) {
       errors.title = "Title must be at least 5 characters.";
     } else if (formData.title.trim().length > 200) {
       errors.title = "Title cannot exceed 200 characters.";
     }
 
-    if (!formData.description.trim() || formData.description.trim().length < 15) {
-      errors.description = "Description must be at least 15 characters to explain the problem clearly.";
-    } else if (formData.description.trim().length > 3000) {
-      errors.description = "Description cannot exceed 3000 characters.";
+    if (!formData.description.trim()) {
+      errors.description = "Detailed problem description is required.";
+    } else if (formData.description.trim().length < 15) {
+      errors.description = "Description must be at least 15 characters so AI can accurately triage it.";
     }
 
-    if (!formData.category.trim()) {
+    if (!formData.category) {
       errors.category = "Please select a category.";
-    }
-
-    if (!formData.district.trim()) {
-      errors.district = "Please select a district.";
-    }
-
-    if (formData.affectedCount < 1) {
-      errors.affectedCount = "Affected count must be at least 1.";
-    }
-
-    if (formData.evidenceUrl && formData.evidenceUrl.trim() !== "") {
-      try {
-        new URL(formData.evidenceUrl.trim());
-      } catch {
-        errors.evidenceUrl = "Please provide a valid URL format (e.g. https://...).";
-      }
     }
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
+  const validateStep2 = () => {
+    const errors: Record<string, string> = {};
+    if (!formData.district) {
+      errors.district = "District selection is required.";
+    }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleNextStep = () => {
+    setGeneralError(null);
+    if (currentStep === 1) {
+      if (validateStep1()) setCurrentStep(2);
+    } else if (currentStep === 2) {
+      if (validateStep2()) setCurrentStep(3);
+    }
+  };
+
+  const handlePrevStep = () => {
+    setGeneralError(null);
+    if (currentStep > 1) {
+      setCurrentStep((prev) => (prev - 1) as 1 | 2 | 3);
+    }
+  };
+
   const handleApplyPreset = (preset: typeof DEMO_PRESETS[0]) => {
     setFormData(preset.data);
+    setSelectedFile(null);
+    setFilePreview(preset.data.evidenceUrl || null);
     setFieldErrors({});
     setGeneralError(null);
   };
 
+  // =========================================================================
+  // SUBMISSION & AI SCREENING WORKFLOW
+  // =========================================================================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGeneralError(null);
 
-    if (!validateForm()) {
+    if (!validateStep1() || !validateStep2()) {
       return;
     }
 
@@ -170,9 +301,41 @@ export const ReportProblemPage: React.FC = () => {
       return;
     }
 
-    // Step 1: Submit Problem (POST /api/problems)
+    let finalEvidenceUrl = formData.evidenceUrl.trim() || undefined;
+
+    // Sub-stage 1: Upload file if selected
+    if (selectedFile) {
+      setStage("UPLOADING");
+      setActiveStepText("Uploading photo evidence to CivicBridge storage...");
+
+      try {
+        const uploadBody = new FormData();
+        uploadBody.append("file", selectedFile);
+
+        const uploadRes = await fetch(`${API_BASE_URL}/upload`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: uploadBody,
+        });
+
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok || !uploadData.success) {
+          throw new Error(uploadData.error || "Failed to upload photo evidence.");
+        }
+
+        finalEvidenceUrl = uploadData.url;
+      } catch (err: any) {
+        setGeneralError(`Photo upload failed: ${err.message}. You can retry or proceed without the photo.`);
+        setStage("WIZARD");
+        return;
+      }
+    }
+
+    // Sub-stage 2: Submit Problem Record
     setStage("SUBMITTING");
-    setActiveStepText("Registering problem in CivicBridge database...");
+    setActiveStepText("Registering problem in Statewide Problem Bank...");
 
     let newProblem: any = null;
 
@@ -189,9 +352,11 @@ export const ReportProblemPage: React.FC = () => {
           category: formData.category,
           subCategory: formData.subCategory.trim() || undefined,
           district: formData.district,
-          location: formData.location.trim() || undefined,
-          affectedCount: Number(formData.affectedCount),
-          evidenceUrl: formData.evidenceUrl.trim() || undefined,
+          locationText: formData.location.trim() || undefined,
+          latitude: formData.latitude || undefined,
+          longitude: formData.longitude || undefined,
+          affectedCount: Number(formData.affectedCount) || 1,
+          evidenceUrl: finalEvidenceUrl,
         }),
       });
 
@@ -218,13 +383,13 @@ export const ReportProblemPage: React.FC = () => {
       setCreatedProblem(newProblem);
     } catch (err: any) {
       setGeneralError(err.message || "Failed to communicate with server.");
-      setStage("FORM");
+      setStage("WIZARD");
       return;
     }
 
-    // Step 2: Trigger AI Screening Pipeline (POST /api/problems/:id/process-ai)
+    // Sub-stage 3: Autonomous AI Screening & Normalized Priority Scoring
     setStage("SCREENING");
-    setActiveStepText("Running AI relevance screening & 5-factor priority calculation...");
+    setActiveStepText("AI Screening: verifying civic relevance, detecting duplicates & computing 5-factor priority score...");
 
     try {
       const aiRes = await fetch(`${API_BASE_URL}/problems/${newProblem.id}/process-ai`, {
@@ -250,505 +415,756 @@ export const ReportProblemPage: React.FC = () => {
       setAiResult(aiData.aiAnalysis);
       setStage("RESULT");
     } catch (err: any) {
-      setGeneralError(`Problem created (ID: ${newProblem.id}), but AI screening failed: ${err.message}`);
+      setGeneralError(err.message || "AI triage pipeline error. Problem saved with PENDING status.");
       setStage("RESULT");
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      title: "",
-      description: "",
-      category: "Water & Sanitation",
-      subCategory: "",
-      district: "Ranchi",
-      location: "",
-      affectedCount: 20,
-      evidenceUrl: "",
-    });
-    setFieldErrors({});
-    setGeneralError(null);
-    setCreatedProblem(null);
-    setAiResult(null);
-    setStage("FORM");
+  // Helper colors
+  const getTierColor = (tier?: string) => {
+    switch (tier) {
+      case "HIGH":
+        return "bg-rose-50 text-rose-700 border-rose-200";
+      case "MEDIUM":
+        return "bg-amber-50 text-amber-700 border-amber-200";
+      case "LOW":
+      default:
+        return "bg-slate-100 text-slate-700 border-slate-200";
+    }
+  };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 70) return "bg-rose-600 text-white";
+    if (score >= 40) return "bg-amber-500 text-white";
+    return "bg-slate-600 text-white";
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Top Header */}
-      <header className="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link
-              to="/dashboard/citizen"
-              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-              title="Return to Citizen Dashboard"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div>
-              <h1 className="text-base font-bold text-slate-900 leading-tight">Report a Civic Problem</h1>
-              <p className="text-xs text-slate-500">Crowdsourced Societal Challenge Submission — Jharkhand</p>
-            </div>
+      <header className="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-20 shadow-xs">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
+          <Link
+            to="/dashboard/citizen"
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 min-h-[44px] px-2 -ml-2 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Dashboard</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-800">Report Problem</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+              Mobile Wizard
+            </span>
           </div>
-          <span className="px-2.5 py-1 text-xs font-semibold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">
-            Citizen Mode
-          </span>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6">
-        {/* Stage 1: Form Input */}
-        {stage === "FORM" && (
-          <div className="space-y-6">
-            {/* General Error Banner */}
-            {generalError && (
-              <div className="p-4 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3 text-red-800 text-sm">
-                <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                <span>{generalError}</span>
-              </div>
-            )}
+      {/* Main Content */}
+      <main className="flex-1 max-w-3xl mx-auto w-full p-4 sm:p-6 space-y-5">
+        {/* Quick Demo Scenario Bar */}
+        {stage === "WIZARD" && (
+          <div className="bg-slate-100/80 rounded-xl p-3 border border-slate-200 text-xs">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                Quick Demo Scenarios
+              </span>
+              <span className="text-[10px] text-slate-400">Click to autofill</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+              {DEMO_PRESETS.map((p, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleApplyPreset(p)}
+                  className="text-left p-2 rounded-lg bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-[11px] font-medium text-slate-700 hover:text-emerald-900 transition-colors truncate"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-            {/* Quick-fill Presets for Hackathon Testing */}
-            <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="w-4 h-4 text-amber-600" />
-                <span className="text-xs font-bold text-amber-900 uppercase tracking-wide">
-                  Quick-Fill Test Scenarios (Demo Presets)
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {DEMO_PRESETS.map((p, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleApplyPreset(p)}
-                    className="text-left px-3 py-2 rounded-lg bg-white hover:bg-amber-50 border border-amber-200 text-xs font-medium text-slate-800 shadow-sm transition-all truncate"
+        {/* Global Error Banner */}
+        {generalError && (
+          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-start gap-2.5 text-red-800 text-xs shadow-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+            <span>{generalError}</span>
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* STAGE A: 3-STEP MOBILE WIZARD */}
+        {/* =================================================================== */}
+        {stage === "WIZARD" && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Step Progress Stepper */}
+            <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3.5">
+              <div className="flex items-center justify-between max-w-md mx-auto">
+                {/* Step 1 Pill */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(1)}
+                  className={`flex items-center gap-2 text-xs font-bold transition-colors ${
+                    currentStep === 1
+                      ? "text-emerald-700"
+                      : currentStep > 1
+                      ? "text-emerald-600"
+                      : "text-slate-400"
+                  }`}
+                >
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                      currentStep === 1
+                        ? "bg-emerald-600 text-white"
+                        : currentStep > 1
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-slate-200 text-slate-500"
+                    }`}
                   >
-                    {p.label}
-                  </button>
-                ))}
+                    {currentStep > 1 ? <Check className="w-3.5 h-3.5" /> : "1"}
+                  </div>
+                  <span className="hidden sm:inline">Overview</span>
+                </button>
+
+                <div className={`h-0.5 flex-1 mx-2 ${currentStep >= 2 ? "bg-emerald-500" : "bg-slate-200"}`}></div>
+
+                {/* Step 2 Pill */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (validateStep1()) setCurrentStep(2);
+                  }}
+                  className={`flex items-center gap-2 text-xs font-bold transition-colors ${
+                    currentStep === 2
+                      ? "text-emerald-700"
+                      : currentStep > 2
+                      ? "text-emerald-600"
+                      : "text-slate-400"
+                  }`}
+                >
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                      currentStep === 2
+                        ? "bg-emerald-600 text-white"
+                        : currentStep > 2
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-slate-200 text-slate-500"
+                    }`}
+                  >
+                    {currentStep > 2 ? <Check className="w-3.5 h-3.5" /> : "2"}
+                  </div>
+                  <span className="hidden sm:inline">Location & Evidence</span>
+                </button>
+
+                <div className={`h-0.5 flex-1 mx-2 ${currentStep >= 3 ? "bg-emerald-500" : "bg-slate-200"}`}></div>
+
+                {/* Step 3 Pill */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (validateStep1() && validateStep2()) setCurrentStep(3);
+                  }}
+                  className={`flex items-center gap-2 text-xs font-bold transition-colors ${
+                    currentStep === 3 ? "text-emerald-700" : "text-slate-400"
+                  }`}
+                >
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                      currentStep === 3
+                        ? "bg-emerald-600 text-white"
+                        : "bg-slate-200 text-slate-500"
+                    }`}
+                  >
+                    3
+                  </div>
+                  <span className="hidden sm:inline">Impact & Review</span>
+                </button>
               </div>
             </div>
 
-            {/* Problem Submission Form */}
-            <form onSubmit={handleSubmit} className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-5">
-              {/* Title */}
-              <div>
-                <label htmlFor="title" className="block text-xs font-bold text-slate-800 mb-1">
-                  Problem Title <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="title"
-                  type="text"
-                  required
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="e.g. Broken Handpump Foot Valve in Namkum Panchayat"
-                  className={`block w-full px-3.5 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors ${
-                    fieldErrors.title ? "border-red-300 bg-red-50/30" : "border-slate-300"
-                  }`}
-                />
-                {fieldErrors.title && <p className="mt-1 text-xs text-red-600">{fieldErrors.title}</p>}
-              </div>
+            <form onSubmit={handleSubmit} className="p-5 sm:p-7 space-y-6">
+              {/* =========================================================== */}
+              {/* STEP 1: ISSUE OVERVIEW */}
+              {/* =========================================================== */}
+              {currentStep === 1 && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="border-b border-slate-100 pb-3">
+                    <h2 className="text-base font-bold text-slate-900">Step 1: Problem Overview</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Describe the core civic or environmental challenge in your community.
+                    </p>
+                  </div>
 
-              {/* Description */}
-              <div>
-                <label htmlFor="description" className="block text-xs font-bold text-slate-800 mb-1">
-                  Detailed Description <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  id="description"
-                  required
-                  rows={4}
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Describe the issue, how long it has persisted, who is affected, and why it requires intervention..."
-                  className={`block w-full px-3.5 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors ${
-                    fieldErrors.description ? "border-red-300 bg-red-50/30" : "border-slate-300"
-                  }`}
-                />
-                <div className="flex justify-between mt-1 text-xs text-slate-400">
-                  {fieldErrors.description ? (
-                    <span className="text-red-600">{fieldErrors.description}</span>
-                  ) : (
-                    <span>Minimum 15 characters. Be specific about the local impact.</span>
-                  )}
-                  <span>{formData.description.length}/3000</span>
+                  {/* Title */}
+                  <div>
+                    <label htmlFor="probTitle" className="block text-xs font-semibold text-slate-700 mb-1">
+                      Problem Title <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      id="probTitle"
+                      type="text"
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      placeholder="e.g. Broken Culvert Bridge on Angara-Gondli Rural Road"
+                      className="block w-full px-3.5 py-3 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors bg-white text-slate-900 min-h-[44px]"
+                    />
+                    {fieldErrors.title && (
+                      <p className="text-[11px] text-rose-600 mt-1 font-medium">{fieldErrors.title}</p>
+                    )}
+                  </div>
+
+                  {/* Category & Subcategory */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="probCategory" className="block text-xs font-semibold text-slate-700 mb-1">
+                        Category <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        id="probCategory"
+                        value={formData.category}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                        className="block w-full px-3.5 py-3 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors bg-white text-slate-900 min-h-[44px]"
+                      >
+                        {PROBLEM_CATEGORIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                      {fieldErrors.category && (
+                        <p className="text-[11px] text-rose-600 mt-1 font-medium">{fieldErrors.category}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label htmlFor="probSubCategory" className="block text-xs font-semibold text-slate-700 mb-1">
+                        Subcategory <span className="text-slate-400">(Optional)</span>
+                      </label>
+                      <input
+                        id="probSubCategory"
+                        type="text"
+                        value={formData.subCategory}
+                        onChange={(e) => setFormData({ ...formData, subCategory: e.target.value })}
+                        placeholder="e.g. Bridge Collapse, Drainage, Handpump"
+                        className="block w-full px-3.5 py-3 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors bg-white text-slate-900 min-h-[44px]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label htmlFor="probDesc" className="block text-xs font-semibold text-slate-700">
+                        Detailed Description <span className="text-rose-500">*</span>
+                      </label>
+                      <span className="text-[10px] text-slate-400">
+                        {formData.description.length} / 3000 chars
+                      </span>
+                    </div>
+                    <textarea
+                      id="probDesc"
+                      rows={5}
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Explain what is happening, exact landmarks, how long it has persisted, and the direct danger or disruption to residents..."
+                      className="block w-full p-3 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors bg-white text-slate-900"
+                    />
+                    {fieldErrors.description && (
+                      <p className="text-[11px] text-rose-600 mt-1 font-medium">{fieldErrors.description}</p>
+                    )}
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Our AI pipeline analyzes this narrative to compute severity, affected count, and duplicate similarity.
+                    </p>
+                  </div>
+
+                  {/* Step 1 Next Button */}
+                  <div className="pt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleNextStep}
+                      className="min-h-[44px] px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-1.5"
+                    >
+                      <span>Next: Location & Evidence</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Category & District Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="category" className="block text-xs font-bold text-slate-800 mb-1">
-                    Category <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    id="category"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="block w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
-                  >
-                    {PROBLEM_CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+              {/* =========================================================== */}
+              {/* STEP 2: LOCATION & EVIDENCE UPLOAD */}
+              {/* =========================================================== */}
+              {currentStep === 2 && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="border-b border-slate-100 pb-3">
+                    <h2 className="text-base font-bold text-slate-900">Step 2: Location & Evidence</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Specify where the issue is located and upload supporting photo evidence.
+                    </p>
+                  </div>
+
+                  {/* District */}
+                  <div>
+                    <label htmlFor="probDistrict" className="block text-xs font-semibold text-slate-700 mb-1">
+                      District (Jharkhand) <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      id="probDistrict"
+                      value={formData.district}
+                      onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                      className="block w-full px-3.5 py-3 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors bg-white text-slate-900 min-h-[44px]"
+                    >
+                      {JHARKHAND_DISTRICTS.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                    {fieldErrors.district && (
+                      <p className="text-[11px] text-rose-600 mt-1 font-medium">{fieldErrors.district}</p>
+                    )}
+                  </div>
+
+                  {/* Specific Location & GPS Button */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label htmlFor="probLocation" className="block text-xs font-semibold text-slate-700">
+                        Specific Location / Landmark
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleGetLocation}
+                        disabled={isLocating}
+                        className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 min-h-[32px] px-2 rounded-md hover:bg-emerald-50 transition-colors"
+                      >
+                        <Crosshair className={`w-3.5 h-3.5 ${isLocating ? "animate-spin" : ""}`} />
+                        <span>{isLocating ? "Detecting GPS..." : "Use Current GPS"}</span>
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <MapPin className="w-4 h-4" />
+                      </div>
+                      <input
+                        id="probLocation"
+                        type="text"
+                        value={formData.location}
+                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                        placeholder="e.g. Ward 4, Near Primary Health Center, Gondli Village"
+                        className="block w-full pl-10 pr-3.5 py-3 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors bg-white text-slate-900 min-h-[44px]"
+                      />
+                    </div>
+                    {formData.latitude && formData.longitude && (
+                      <p className="text-[11px] text-emerald-700 font-medium mt-1 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Tagged GPS Coordinates: {formData.latitude}° N, {formData.longitude}° E</span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Photo / Evidence Upload Area */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Photo / Document Evidence
+                    </label>
+
+                    {!selectedFile && !filePreview ? (
+                      <div className="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-2xl p-6 text-center transition-all bg-slate-50/50 hover:bg-emerald-50/20">
+                        <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-2.5">
+                          <Camera className="w-6 h-6" />
+                        </div>
+                        <p className="text-xs font-bold text-slate-800 mb-0.5">
+                          Tap to take photo or choose file from phone
+                        </p>
+                        <p className="text-[11px] text-slate-500 mb-3">
+                          Supports JPEG, PNG, WebP photos or PDF documents up to 5MB
+                        </p>
+                        <label
+                          htmlFor="evidenceFileInput"
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-300 hover:border-emerald-500 text-slate-700 text-xs font-bold rounded-xl shadow-xs cursor-pointer min-h-[44px] transition-colors"
+                        >
+                          <Upload className="w-4 h-4 text-emerald-600" />
+                          <span>Select Photo / File</span>
+                        </label>
+                        <input
+                          id="evidenceFileInput"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                          onChange={handleFileChange}
+                          className="hidden"
+                        />
+                      </div>
+                    ) : (
+                      /* Live Preview Card */
+                      <div className="p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50/40 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {filePreview ? (
+                            <img
+                              src={filePreview}
+                              alt="Evidence Preview"
+                              className="w-16 h-16 rounded-xl object-cover border border-emerald-200 shrink-0 bg-white"
+                            />
+                          ) : (
+                            <div className="w-16 h-16 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                              <FileText className="w-8 h-8" />
+                            </div>
+                          )}
+                          <div className="truncate text-xs">
+                            <span className="font-bold text-slate-900 block truncate">
+                              {selectedFile?.name || "Attached Photo Evidence"}
+                            </span>
+                            <span className="text-slate-500 block text-[11px]">
+                              {selectedFile
+                                ? `${(selectedFile.size / 1024).toFixed(1)} KB`
+                                : "Evidence image ready"}
+                            </span>
+                            <span className="text-emerald-700 font-semibold text-[10px] inline-flex items-center gap-1 mt-0.5">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Ready for submission
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleRemoveFile}
+                          className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-rose-600 p-2 rounded-lg hover:bg-rose-50 transition-colors shrink-0"
+                          title="Remove photo"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Secondary URL toggle */}
+                    <div className="mt-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setShowUrlInput(!showUrlInput)}
+                        className="text-[11px] text-slate-500 hover:text-slate-800 underline font-medium"
+                      >
+                        {showUrlInput ? "Hide web URL input" : "Or link an external photo URL"}
+                      </button>
+
+                      {showUrlInput && (
+                        <div className="mt-2">
+                          <input
+                            type="url"
+                            value={formData.evidenceUrl}
+                            onChange={(e) => {
+                              setFormData({ ...formData, evidenceUrl: e.target.value });
+                              if (e.target.value.startsWith("http")) {
+                                setFilePreview(e.target.value);
+                              }
+                            }}
+                            placeholder="https://example.com/photo.jpg"
+                            className="block w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 bg-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Navigation Buttons */}
+                  <div className="pt-3 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={handlePrevStep}
+                      className="min-h-[44px] px-4 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Back</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNextStep}
+                      className="min-h-[44px] px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-1.5"
+                    >
+                      <span>Next: Impact & Review</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
+              )}
 
-                <div>
-                  <label htmlFor="district" className="block text-xs font-bold text-slate-800 mb-1">
-                    District <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    id="district"
-                    value={formData.district}
-                    onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                    className="block w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
-                  >
-                    {JHARKHAND_DISTRICTS.map((dist) => (
-                      <option key={dist} value={dist}>
-                        {dist}
-                      </option>
-                    ))}
-                  </select>
+              {/* =========================================================== */}
+              {/* STEP 3: IMPACT & FINAL REVIEW */}
+              {/* =========================================================== */}
+              {currentStep === 3 && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="border-b border-slate-100 pb-3">
+                    <h2 className="text-base font-bold text-slate-900">Step 3: Impact Scale & Final Review</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Confirm the population scale and review your submission before AI screening.
+                    </p>
+                  </div>
+
+                  {/* Affected Count */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label htmlFor="affectedCount" className="block text-xs font-semibold text-slate-700">
+                        Estimated Citizens Affected
+                      </label>
+                      <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                        {formData.affectedCount} citizens
+                      </span>
+                    </div>
+                    <input
+                      id="affectedCount"
+                      type="range"
+                      min={1}
+                      max={1500}
+                      step={5}
+                      value={formData.affectedCount}
+                      onChange={(e) => setFormData({ ...formData, affectedCount: Number(e.target.value) })}
+                      className="w-full accent-emerald-600 h-2 bg-slate-200 rounded-lg cursor-pointer my-2"
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <span>1 (Individual)</span>
+                      <span>50 (Neighborhood)</span>
+                      <span>500 (Village Block)</span>
+                      <span>1000+ (Regional)</span>
+                    </div>
+                  </div>
+
+                  {/* Frequency Radio Cards */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Occurrence Frequency
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {FREQUENCY_OPTIONS.map((f) => {
+                        const isSelected = formData.frequency === f.value;
+                        return (
+                          <button
+                            key={f.value}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, frequency: f.value })}
+                            className={`p-3 rounded-xl border text-left transition-all min-h-[44px] ${
+                              isSelected
+                                ? "bg-emerald-50/80 border-emerald-500 ring-1 ring-emerald-500/30 text-emerald-950"
+                                : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold">{f.label}</span>
+                              {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                            </div>
+                            <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                              {f.desc}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Submission Preview Card */}
+                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                      <Eye className="w-4 h-4 text-emerald-600" />
+                      <span>Review Before Submitting</span>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs">
+                      <div>
+                        <span className="text-slate-400 text-[11px] block">Title:</span>
+                        <p className="font-bold text-slate-900">{formData.title || "—"}</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <span className="text-slate-400 block">Category:</span>
+                          <span className="font-semibold text-slate-800">{formData.category}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">District:</span>
+                          <span className="font-semibold text-slate-800">{formData.district}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-slate-400 text-[11px] block">Description:</span>
+                        <p className="text-slate-700 line-clamp-2 text-[11px] leading-relaxed">
+                          {formData.description || "—"}
+                        </p>
+                      </div>
+
+                      {/* Photo Thumbnail in Review */}
+                      {filePreview && (
+                        <div className="pt-1 flex items-center gap-2">
+                          <img
+                            src={filePreview}
+                            alt="Attachment preview"
+                            className="w-12 h-12 rounded-lg object-cover border border-slate-200"
+                          />
+                          <span className="text-[11px] text-emerald-800 font-semibold">
+                            Photo Evidence Attached
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Navigation & Submit Buttons */}
+                  <div className="pt-3 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={handlePrevStep}
+                      className="min-h-[44px] px-4 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Back</span>
+                    </button>
+                    <button
+                      type="submit"
+                      className="min-h-[44px] px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>Submit Problem & Run AI</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              {/* Sub-Category & Location Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="subCategory" className="block text-xs font-bold text-slate-800 mb-1">
-                    Sub-Category <span className="text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <input
-                    id="subCategory"
-                    type="text"
-                    value={formData.subCategory}
-                    onChange={(e) => setFormData({ ...formData, subCategory: e.target.value })}
-                    placeholder="e.g. Drinking Water Supply"
-                    className="block w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="location" className="block text-xs font-bold text-slate-800 mb-1">
-                    Specific Location / Landmark <span className="text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <input
-                    id="location"
-                    type="text"
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    placeholder="e.g. Ward 4, Near Govt Middle School"
-                    className="block w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-
-              {/* Affected Count & Evidence URL Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="affectedCount" className="block text-xs font-bold text-slate-800 mb-1">
-                    Estimated Affected People <span className="text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <input
-                    id="affectedCount"
-                    type="number"
-                    min={1}
-                    value={formData.affectedCount}
-                    onChange={(e) => setFormData({ ...formData, affectedCount: parseInt(e.target.value, 10) || 1 })}
-                    className="block w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  />
-                  <span className="text-[11px] text-slate-400">Used by AI pipeline to assess societal scale factor.</span>
-                </div>
-
-                <div>
-                  <label htmlFor="evidenceUrl" className="block text-xs font-bold text-slate-800 mb-1">
-                    Evidence URL <span className="text-slate-400 font-normal">(Photo / Document Link)</span>
-                  </label>
-                  <input
-                    id="evidenceUrl"
-                    type="url"
-                    value={formData.evidenceUrl}
-                    onChange={(e) => setFormData({ ...formData, evidenceUrl: e.target.value })}
-                    placeholder="https://..."
-                    className={`block w-full px-3.5 py-2.5 text-sm border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${
-                      fieldErrors.evidenceUrl ? "border-red-300 bg-red-50/30" : "border-slate-300"
-                    }`}
-                  />
-                  {fieldErrors.evidenceUrl ? (
-                    <p className="mt-1 text-xs text-red-600">{fieldErrors.evidenceUrl}</p>
-                  ) : (
-                    <span className="text-[11px] text-slate-400">Publicly accessible photo, report, or cloud link.</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Submission CTA */}
-              <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <p className="text-xs text-slate-500">
-                  Upon submission, your issue will immediately enter the autonomous AI relevance screening pipeline.
-                </p>
-                <button
-                  type="submit"
-                  className="w-full sm:w-auto h-11 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-lg shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all shrink-0"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Submit & Run AI Screening</span>
-                </button>
-              </div>
+              )}
             </form>
           </div>
         )}
 
-        {/* Stage 2 & 3: Loading / Screening Animation */}
-        {(stage === "SUBMITTING" || stage === "SCREENING") && (
-          <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm text-center max-w-lg mx-auto space-y-6">
-            <div className="w-16 h-16 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">
-                {stage === "SUBMITTING" ? "Submitting Problem..." : "AI Problem Triage In Progress"}
-              </h2>
-              <p className="text-sm text-slate-500 mt-1">{activeStepText}</p>
+        {/* =================================================================== */}
+        {/* STAGE B: ASYNCHRONOUS PIPELINE PROGRESS (UPLOADING / SUBMITTING / AI) */}
+        {/* =================================================================== */}
+        {(stage === "UPLOADING" || stage === "SUBMITTING" || stage === "SCREENING") && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm text-center space-y-4">
+            <div className="w-12 h-12 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-slate-900">
+                {stage === "UPLOADING"
+                  ? "Uploading Photo Evidence"
+                  : stage === "SUBMITTING"
+                  ? "Creating Problem Record"
+                  : "Running AI Pipeline"}
+              </h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">{activeStepText}</p>
             </div>
-
-            {/* Pipeline progress steps */}
-            <div className="space-y-3 text-left bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
-              <div className="flex items-center gap-2.5 text-emerald-700 font-semibold">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>1. Stored Problem with initial PENDING status</span>
-              </div>
-              <div className={`flex items-center gap-2.5 ${stage === "SCREENING" ? "text-emerald-700 font-semibold" : "text-slate-400"}`}>
-                {stage === "SCREENING" ? (
-                  <div className="w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <Clock className="w-4 h-4" />
-                )}
-                <span>2. AI Spam & Relevance Triage</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-slate-400">
-                <Clock className="w-4 h-4" />
-                <span>3. 5-Factor Priority Scoring & Advisory Duplicate Detection</span>
-              </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Zero-Gate Parallel Trust Pipeline</span>
             </div>
           </div>
         )}
 
-        {/* Stage 4: Result Display */}
+        {/* =================================================================== */}
+        {/* STAGE C: AI SCREENING RESULT DISPLAY */}
+        {/* =================================================================== */}
         {stage === "RESULT" && createdProblem && (
-          <div className="space-y-6">
-            {/* Status Header Banner */}
-            {createdProblem.filterStatus === "PASSED" && (
-              <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-5 shadow-sm space-y-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <span className="px-2.5 py-0.5 text-xs font-bold bg-emerald-200 text-emerald-900 rounded-full uppercase tracking-wide">
-                      AI Screening Passed
-                    </span>
-                    <h2 className="text-lg font-bold text-slate-900 mt-0.5">
-                      Problem Published to the CivicBridge Problem Bank
-                    </h2>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-700 pl-13 leading-relaxed">
-                  Your civic problem is legitimate and has entered the statewide Problem Bank. Universities can now submit research proposals, startups can develop commercial solutions, and industry can offer mentorship/prototyping resources.
-                </p>
-                {createdProblem.priorityTier === "HIGH" && (
-                  <div className="mt-2 p-2.5 rounded-lg bg-emerald-100/70 text-emerald-950 text-xs font-medium flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
-                    <span>
-                      High-Priority Flagged: This problem scores in the top tier ({createdProblem.priorityScore}/100) and has also been routed to the parallel Government Review Queue.
-                    </span>
-                  </div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6 animate-in fade-in">
+            {/* Outcome Header */}
+            <div className="flex items-start gap-4">
+              <div
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                  createdProblem.filterStatus === "PASSED"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : createdProblem.filterStatus === "FLAGGED"
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-rose-100 text-rose-700"
+                }`}
+              >
+                {createdProblem.filterStatus === "PASSED" ? (
+                  <CheckCircle2 className="w-7 h-7" />
+                ) : createdProblem.filterStatus === "FLAGGED" ? (
+                  <Clock className="w-7 h-7" />
+                ) : (
+                  <XCircle className="w-7 h-7" />
                 )}
               </div>
-            )}
 
-            {createdProblem.filterStatus === "FLAGGED" && (
-              <div className="bg-amber-50 border border-amber-300 rounded-2xl p-5 shadow-sm space-y-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                    <AlertTriangle className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <span className="px-2.5 py-0.5 text-xs font-bold bg-amber-200 text-amber-900 rounded-full uppercase tracking-wide">
-                      Flagged For Manual Review
-                    </span>
-                    <h2 className="text-lg font-bold text-slate-900 mt-0.5">
-                      Enqueued for Government Administrator Triage
-                    </h2>
-                  </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-bold text-slate-900">
+                    {createdProblem.filterStatus === "PASSED"
+                      ? "Problem Published to Problem Bank!"
+                      : createdProblem.filterStatus === "FLAGGED"
+                      ? "Problem Enqueued for Manual Review"
+                      : "Submission Rejected by AI Filter"}
+                  </h2>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                      createdProblem.filterStatus === "PASSED"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : createdProblem.filterStatus === "FLAGGED"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-rose-100 text-rose-800"
+                    }`}
+                  >
+                    {createdProblem.filterStatus}
+                  </span>
                 </div>
-                <p className="text-xs text-slate-700 pl-13 leading-relaxed">
-                  The AI screener found the description ambiguous or lacking verifiable details. In accordance with platform policy, your problem has <strong>not been published to the open Problem Bank</strong> yet, and has been placed in the Administrative Triage queue for manual inspection.
+                <p className="text-xs text-slate-500">
+                  {createdProblem.filterStatus === "PASSED"
+                    ? "Your report has cleared AI screening and is now open for university proposals and startup ventures."
+                    : createdProblem.filterStatus === "FLAGGED"
+                    ? "Our AI classifier detected ambiguous information. An administrator will review your report shortly."
+                    : "The submission was identified as promotional marketing, spam, or non-civic content."}
                 </p>
-                <div className="p-3 bg-white/80 rounded-lg border border-amber-200 text-xs text-slate-600">
-                  <span className="font-semibold text-slate-800">Reason: </span>
-                  {createdProblem.filterReason || "Ambiguous problem description requiring human triage."}
-                </div>
               </div>
-            )}
+            </div>
 
-            {createdProblem.filterStatus === "REJECTED" && (
-              <div className="bg-red-50 border border-red-300 rounded-2xl p-5 shadow-sm space-y-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                    <XCircle className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <span className="px-2.5 py-0.5 text-xs font-bold bg-red-200 text-red-900 rounded-full uppercase tracking-wide">
-                      Rejected by AI Filter
-                    </span>
-                    <h2 className="text-lg font-bold text-slate-900 mt-0.5">
-                      Submission Not Eligible for Problem Bank
-                    </h2>
-                  </div>
+            {/* AI Summary Box */}
+            {aiResult && (
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <span>AI Triage Summary</span>
                 </div>
-                <p className="text-xs text-slate-700 pl-13 leading-relaxed">
-                  This submission was classified as promotional spam, automated gibberish, or commercial advertisement. It has <strong>not been published</strong> and will not appear in the Problem Bank.
-                </p>
-                <div className="p-3 bg-white/80 rounded-lg border border-red-200 text-xs text-slate-600">
-                  <span className="font-semibold text-slate-800">Filter Reason: </span>
-                  {createdProblem.filterReason}
-                </div>
-              </div>
-            )}
+                <p className="text-xs text-slate-700 leading-relaxed">{aiResult.aiSummary}</p>
 
-            {/* Advisory Duplicate Warning Banner */}
-            {aiResult?.isDuplicate && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3 text-xs text-blue-900">
-                <Copy className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <span className="font-bold block">Advisory Duplicate Notice</span>
-                  <p className="text-blue-800 leading-relaxed">
-                    The AI detected potential similarity ({Math.round((aiResult.duplicateSimilarity || 0) * 100)}% token match) with an existing problem in the system. Per CivicBridge guidelines, your submission has <strong>not been rejected</strong> and remains active for review and cross-referencing.
-                  </p>
-                  {aiResult.similarProblemIds?.length > 0 && (
-                    <span className="text-[11px] text-blue-600 font-mono block">
-                      Matched Candidate IDs: {aiResult.similarProblemIds.slice(0, 2).join(", ")}
+                {/* Priority Breakdown Pills */}
+                <div className="pt-2 border-t border-slate-200 flex flex-wrap items-center gap-2 text-xs">
+                  <span className={`px-2.5 py-1 rounded-md font-bold text-xs ${getScoreColor(createdProblem.priorityScore)}`}>
+                    Priority Score: {createdProblem.priorityScore}
+                  </span>
+                  <span className={`px-2.5 py-1 rounded-md font-extrabold text-xs border ${getTierColor(createdProblem.priorityTier)}`}>
+                    Tier {createdProblem.priorityTier}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md font-semibold text-xs bg-slate-200 text-slate-700">
+                    Category: {createdProblem.category}
+                  </span>
+                  {aiResult.isDuplicate && (
+                    <span className="px-2.5 py-1 rounded-md font-bold text-xs bg-purple-100 text-purple-800">
+                      Duplicate Match ({Math.round((aiResult.duplicateSimilarity || 0) * 100)}%)
                     </span>
                   )}
                 </div>
               </div>
             )}
 
-            {/* Summary & Analysis Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Problem Metadata Card */}
-              <div className="md:col-span-2 bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4">
-                <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
-                  <Info className="w-4 h-4 text-emerald-600" />
-                  <span>Submission Summary</span>
-                </h3>
-
-                <div className="space-y-2">
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase">Title</span>
-                    <p className="text-sm font-bold text-slate-900">{createdProblem.title}</p>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase">AI 2-Sentence Summary</span>
-                    <p className="text-xs text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200 leading-relaxed">
-                      {aiResult?.aiSummary || createdProblem.description}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-xs">
-                    <div>
-                      <span className="text-[11px] text-slate-400 block">Category</span>
-                      <span className="font-semibold text-slate-800">{createdProblem.category}</span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-slate-400 block">District</span>
-                      <span className="font-semibold text-slate-800">{createdProblem.district}</span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-slate-400 block">Affected Scale</span>
-                      <span className="font-semibold text-slate-800">{createdProblem.affectedCount || 1} people</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Priority & Factors Card */}
-              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm space-y-4">
-                <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">
-                  Priority Assessment
-                </h3>
-
-                {/* Main Score & Tier */}
-                <div className="text-center py-2 bg-slate-50 rounded-xl border border-slate-200">
-                  <span className="text-3xl font-extrabold text-slate-900">
-                    {createdProblem.priorityScore || 0}
-                  </span>
-                  <span className="text-xs text-slate-400 block">/ 100 Priority Score</span>
-                  <div className="mt-2">
-                    <span
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
-                        createdProblem.priorityTier === "HIGH"
-                          ? "bg-red-100 text-red-800 border border-red-200"
-                          : createdProblem.priorityTier === "MEDIUM"
-                          ? "bg-amber-100 text-amber-800 border border-amber-200"
-                          : "bg-slate-200 text-slate-700"
-                      }`}
-                    >
-                      Tier: {createdProblem.priorityTier}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Factor Breakdown */}
-                {aiResult && (
-                  <div className="space-y-1.5 text-xs">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase block mb-1">
-                      Normalized Factors (0–100)
-                    </span>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Severity (25%)</span>
-                      <span className="font-semibold text-slate-900">{aiResult.severityScore}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Affected Scale (25%)</span>
-                      <span className="font-semibold text-slate-900">{aiResult.affectedPeopleScore}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Frequency (15%)</span>
-                      <span className="font-semibold text-slate-900">{aiResult.frequencyScore}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Evidence Quality (15%)</span>
-                      <span className="font-semibold text-slate-900">{aiResult.evidenceScore}</span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span className="text-slate-600">Urgency Factor (20%)</span>
-                      <span className="font-semibold text-slate-900">{aiResult.urgencyScore}</span>
-                    </div>
-                  </div>
-                )}
+            {/* Zero-Gate Trust Assurance Notice */}
+            <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2 text-xs text-blue-900">
+              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div>
+                <strong>Parallel Trust Model Active:</strong> Institutions (Universities, Startups, Industry) do not need to wait for government verification to view your problem or submit technical proposals.
               </div>
             </div>
 
-            {/* Bottom Actions */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200">
+            {/* Next Steps Buttons */}
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+              <Link
+                to="/problems"
+                className="min-h-[44px] px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+              >
+                <span>View in Problem Bank</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
               <Link
                 to="/dashboard/citizen"
-                className="w-full sm:w-auto px-5 py-2.5 text-sm font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-300 rounded-lg text-center transition-colors"
+                className="min-h-[44px] px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5"
               >
-                Return to Citizen Dashboard
+                <span>Go to Citizen Dashboard</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </Link>
-              <button
-                type="button"
-                onClick={resetForm}
-                className="w-full sm:w-auto px-6 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm text-center transition-colors"
-              >
-                Report Another Problem
-              </button>
             </div>
           </div>
         )}
@@ -756,3 +1172,5 @@ export const ReportProblemPage: React.FC = () => {
     </div>
   );
 };
+
+export default ReportProblemPage;

@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { FilterStatus } from "@prisma/client";
+import { z } from "zod";
 import { config } from "../../config/index.js";
 import { AIAnalysisResult } from "./ai.types.js";
 import { calculatePriority } from "./priority.calculator.js";
@@ -8,8 +9,34 @@ import { MockAIService } from "./mock.ai.service.js";
 const mockService = new MockAIService();
 
 /**
+ * Strict Zod schema for validating Gemini LLM JSON response.
+ * Protects against malformed LLM outputs, missing fields, or hallucinated types.
+ */
+export const GeminiOutputSchema = z.object({
+  filterStatus: z.enum(["PASSED", "REJECTED", "FLAGGED"]),
+  filterReason: z.string().min(1),
+  confidenceScore: z.number().min(0).max(1),
+  predictedCategory: z.string().min(1),
+  predictedSubCategory: z.string().nullable().optional(),
+  aiSummary: z.string().min(1),
+  severityScore: z.number().int().min(0).max(100),
+  affectedPeopleScore: z.number().int().min(0).max(100),
+  frequencyScore: z.number().int().min(0).max(100),
+  evidenceScore: z.number().int().min(0).max(100),
+  urgencyScore: z.number().int().min(0).max(100),
+  aiUrgencyScore: z.number().int().min(1).max(10),
+  aiUrgencyReason: z.string().min(1),
+  rootCauseHypotheses: z.array(z.string()).default([]),
+  requiredExpertise: z.array(z.string()).default([]),
+  departmentHints: z.array(z.string()).default([]),
+});
+
+export type GeminiOutput = z.infer<typeof GeminiOutputSchema>;
+
+/**
  * Gemini AI Service for CivicBridge.
- * Uses Google Gemini API when configured, otherwise falls back seamlessly to MockAIService.
+ * Uses Google Gemini API when configured, with strict Zod validation
+ * and resilient heuristic fallback to MockAIService.
  */
 export class GeminiAIService {
   private ai: GoogleGenAI | null = null;
@@ -33,7 +60,12 @@ export class GeminiAIService {
     district: string;
     affectedCount?: number | null;
     evidenceUrl?: string | null;
-  }): Promise<Omit<AIAnalysisResult, "isDuplicate" | "duplicateSimilarity" | "similarProblemIds">> {
+  }): Promise<
+    Omit<
+      AIAnalysisResult,
+      "isDuplicate" | "duplicateSimilarity" | "similarProblemIds" | "duplicateStatus" | "duplicateCandidateTitle"
+    >
+  > {
     // If not configured or MOCK_AI is enabled, immediately use deterministic mock
     if (!this.ai || config.mockAi) {
       return mockService.analyze(problem);
@@ -66,6 +98,9 @@ Rules:
 8. aiUrgencyScore: Integer 1 to 10 assessing time criticality.
 9. urgencyScore: Integer 0 to 100 (aiUrgencyScore * 10).
 10. aiUrgencyReason: 1 sentence justification for the urgency score.
+11. rootCauseHypotheses: Array of 2-3 concise root cause hypotheses explaining underlying systemic breakdown.
+12. requiredExpertise: Array of 2-4 academic/engineering disciplines required for solving this (e.g. Civil Engineering, Hydrology).
+13. departmentHints: Array of 1-3 relevant Jharkhand government departments (e.g. Drinking Water and Sanitation Department).
 
 Respond ONLY with this JSON structure:
 {
@@ -81,7 +116,10 @@ Respond ONLY with this JSON structure:
   "evidenceScore": number,
   "urgencyScore": number,
   "aiUrgencyScore": number,
-  "aiUrgencyReason": string
+  "aiUrgencyReason": string,
+  "rootCauseHypotheses": string[],
+  "requiredExpertise": string[],
+  "departmentHints": string[]
 }
 `;
 
@@ -96,9 +134,18 @@ Respond ONLY with this JSON structure:
         throw new Error("Gemini response did not contain valid JSON.");
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
+      const rawJson = JSON.parse(jsonMatch[0]);
 
-      // Calculate priority score using exact formula
+      // Strict validation via Zod schema
+      const validation = GeminiOutputSchema.safeParse(rawJson);
+      if (!validation.success) {
+        console.warn("⚠️ Gemini response failed Zod schema validation:", validation.error.format());
+        return mockService.analyze(problem);
+      }
+
+      const parsed = validation.data;
+
+      // Calculate priority score using exact deterministic formula
       const { priorityScore, priorityTier } = calculatePriority({
         severityScore: parsed.severityScore,
         affectedPeopleScore: parsed.affectedPeopleScore,
@@ -110,7 +157,7 @@ Respond ONLY with this JSON structure:
       return {
         filterStatus: parsed.filterStatus as FilterStatus,
         filterReason: parsed.filterReason,
-        confidenceScore: parsed.confidenceScore || 0.9,
+        confidenceScore: parsed.confidenceScore,
         predictedCategory: parsed.predictedCategory || problem.category,
         predictedSubCategory: parsed.predictedSubCategory || problem.subCategory || null,
         aiSummary: parsed.aiSummary,
@@ -123,6 +170,17 @@ Respond ONLY with this JSON structure:
         aiUrgencyReason: parsed.aiUrgencyReason,
         priorityScore,
         priorityTier,
+        rootCauseHypotheses: parsed.rootCauseHypotheses.length > 0 ? parsed.rootCauseHypotheses : [
+          "Systemic infrastructure aging and deferred maintenance.",
+          "Capacity overutilization in localized community zone."
+        ],
+        requiredExpertise: parsed.requiredExpertise.length > 0 ? parsed.requiredExpertise : [
+          "Municipal Civil Engineering",
+          "Public Infrastructure Planning"
+        ],
+        departmentHints: parsed.departmentHints.length > 0 ? parsed.departmentHints : [
+          "District Urban Development Agency"
+        ],
       };
     } catch (err) {
       console.warn("⚠️ Gemini AI analysis failed, falling back to deterministic mock analyzer:", err);

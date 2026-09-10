@@ -2,7 +2,7 @@
 export type Role = "CITIZEN" | "ADMIN" | "UNIVERSITY" | "INDUSTRY" | "STARTUP";
 
 // Institutional Entity Type
-export type OrganizationType = "UNIVERSITY" | "INDUSTRY" | "STARTUP";
+export type OrganizationType = "UNIVERSITY" | "INDUSTRY" | "STARTUP" | "GOVERNMENT";
 
 // Exactly 3 Priority Tiers per specification (No CRITICAL)
 export type PriorityTier = "LOW" | "MEDIUM" | "HIGH";
@@ -22,8 +22,18 @@ export type ProposalStatus =
   | "COMPLETED"
   | "WITHDRAWN";
 
-// Industry Collaboration Status
-export type CollaborationStatus = "INTERESTED" | "ACTIVE" | "COMPLETED";
+// Collaboration Status (V2 legacy + V3 structured commitment)
+export type CollaborationStatus =
+  | "INTERESTED"
+  | "ACTIVE"
+  | "COMPLETED"
+  | "PROPOSED"
+  | "ACCEPTED"
+  | "IN_PROGRESS"
+  | "DELIVERED"
+  | "CONFIRMED"
+  | "DECLINED"
+  | "CANCELLED";
 
 export type FilterStatus = "PENDING" | "PASSED" | "REJECTED" | "FLAGGED";
 
