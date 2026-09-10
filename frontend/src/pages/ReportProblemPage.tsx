@@ -58,7 +58,9 @@ interface FormState {
   longitude: number | null;
   affectedCount: number;
   evidenceUrl: string;
+  videoUrl: string;
   frequency: string;
+  urgencyNotes: string;
 }
 
 type SubmissionStage = "WIZARD" | "UPLOADING" | "SUBMITTING" | "SCREENING" | "RESULT";
@@ -132,7 +134,9 @@ export const ReportProblemPage: React.FC = () => {
     longitude: null,
     affectedCount: 50,
     evidenceUrl: "",
+    videoUrl: "",
     frequency: "Constant / Daily",
+    urgencyNotes: "",
   });
 
   // Photo / File state
@@ -277,7 +281,11 @@ export const ReportProblemPage: React.FC = () => {
   };
 
   const handleApplyPreset = (preset: typeof DEMO_PRESETS[0]) => {
-    setFormData(preset.data);
+    setFormData({
+      ...preset.data,
+      videoUrl: "",
+      urgencyNotes: "",
+    });
     setSelectedFile(null);
     setFilePreview(preset.data.evidenceUrl || null);
     setFieldErrors({});
@@ -357,6 +365,7 @@ export const ReportProblemPage: React.FC = () => {
           longitude: formData.longitude || undefined,
           affectedCount: Number(formData.affectedCount) || 1,
           evidenceUrl: finalEvidenceUrl,
+          videoUrl: formData.videoUrl.trim() || undefined,
         }),
       });
 
@@ -866,6 +875,24 @@ export const ReportProblemPage: React.FC = () => {
                         </div>
                       )}
                     </div>
+
+                    {/* Optional Video / External Media URL */}
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <label htmlFor="probVideoUrl" className="block text-xs font-semibold text-slate-700 mb-1">
+                        Optional Video / Secondary Media Evidence Link
+                      </label>
+                      <input
+                        id="probVideoUrl"
+                        type="url"
+                        value={formData.videoUrl}
+                        onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
+                        placeholder="e.g. https://youtu.be/... or Google Drive video link"
+                        className="block w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors bg-white text-slate-900 min-h-[44px]"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Video walkthroughs of water runoff, road hazards, or infrastructure damage help solvers prepare technical pilots.
+                      </p>
+                    </div>
                   </div>
 
                   {/* Navigation Buttons */}
@@ -928,6 +955,21 @@ export const ReportProblemPage: React.FC = () => {
                       <span>500 (Village Block)</span>
                       <span>1000+ (Regional)</span>
                     </div>
+                  </div>
+
+                  {/* Optional Urgency Context */}
+                  <div className="pt-2">
+                    <label htmlFor="urgencyNotes" className="block text-xs font-semibold text-slate-700 mb-1">
+                      Urgency & Risk Context <span className="text-slate-400">(Optional)</span>
+                    </label>
+                    <textarea
+                      id="urgencyNotes"
+                      rows={2}
+                      value={formData.urgencyNotes}
+                      onChange={(e) => setFormData({ ...formData, urgencyNotes: e.target.value })}
+                      placeholder="e.g. Monsoon flooding expected next week; imminent danger to primary school children..."
+                      className="block w-full p-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors bg-white text-slate-900 resize-none"
+                    />
                   </div>
 
                   {/* Frequency Radio Cards */}

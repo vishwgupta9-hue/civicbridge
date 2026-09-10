@@ -11,10 +11,21 @@ const router = Router();
 router.use(authenticate);
 router.use(authorizeRoles(Role.STARTUP));
 
-// Validation Schemas
 const claimOpportunitySchema = z.object({
   notes: z.string().trim().optional(),
   targetBeneficiaries: z.string().trim().optional(),
+});
+
+const proposeSolutionSchema = z.object({
+  problemId: z.string().min(1, "Problem ID is required"),
+  solutionName: z.string().trim().min(3, "Solution name must be at least 3 characters").max(250),
+  solutionSummary: z.string().trim().min(10, "What does your solution do must be at least 10 characters"),
+  productTechOffered: z.string().trim().min(5, "Product / technology offered must be at least 5 characters"),
+  howItSolves: z.string().trim().min(10, "How it solves this problem must be at least 10 characters"),
+  deploymentRequirements: z.string().trim().min(5, "Deployment requirements must be at least 5 characters"),
+  expectedTimeline: z.string().trim().min(3, "Expected deployment timeline is required"),
+  estimatedCost: z.string().trim().optional(),
+  expectedCivicImpact: z.string().trim().min(5, "Expected civic impact must be at least 5 characters"),
 });
 
 const createSupportRequestSchema = z.object({
@@ -691,6 +702,142 @@ router.post("/claim/:problemId", async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: "Failed to claim opportunity.",
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/startup/propose-solution
+ * Allows an authenticated startup to submit a concrete solution for a civic opportunity.
+ * Creates or upgrades a BusinessConcept to CONCEPT_SUBMITTED stage with detailed solution structure.
+ */
+router.post("/propose-solution", async (req: Request, res: Response) => {
+  if (!req.user?.organizationId) {
+    res.status(400).json({
+      success: false,
+      error: "Authenticated user must be associated with a registered startup organization.",
+    });
+    return;
+  }
+
+  const parseResult = proposeSolutionSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({
+      success: false,
+      error: "Validation error",
+      details: parseResult.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const {
+    problemId,
+    solutionName,
+    solutionSummary,
+    productTechOffered,
+    howItSolves,
+    deploymentRequirements,
+    expectedTimeline,
+    estimatedCost,
+    expectedCivicImpact,
+  } = parseResult.data;
+
+  try {
+    const problem = await prisma.problem.findUnique({
+      where: { id: problemId },
+    });
+
+    if (!problem) {
+      res.status(404).json({
+        success: false,
+        error: `Problem with ID ${problemId} not found.`,
+      });
+      return;
+    }
+
+    if (problem.filterStatus !== FilterStatus.PASSED) {
+      res.status(400).json({
+        success: false,
+        error: `Problem cannot accept solution proposals because its filterStatus is ${problem.filterStatus}. Only PASSED problems in the Problem Bank can receive proposals.`,
+      });
+      return;
+    }
+
+    // Check if startup already has a concept for this problem
+    const existing = await prisma.businessConcept.findFirst({
+      where: {
+        problemId,
+        startupId: req.user.organizationId,
+      },
+    });
+
+    // Format rich solution details into the existing BusinessConcept fields
+    const formattedSolutionDescription = `${solutionSummary}\n\nTechnology / Product: ${productTechOffered}\nHow It Solves Problem: ${howItSolves}`;
+    const formattedBusinessModel = `Solution: ${solutionName}\nDeployment: ${deploymentRequirements}\nTimeline: ${expectedTimeline}${estimatedCost ? `\nEstimated Cost: ${estimatedCost}` : ""}`;
+    const formattedSustainabilityModel = `Impact: ${expectedCivicImpact}\nDeployment: ${deploymentRequirements}`;
+
+    let concept;
+    if (existing) {
+      // Update existing claim/concept with full proposal
+      concept = await prisma.businessConcept.update({
+        where: { id: existing.id },
+        data: {
+          solutionDescription: formattedSolutionDescription,
+          targetBeneficiaries: `Citizens and community stakeholders in ${problem.district}`,
+          marketSize: solutionName,
+          businessModel: formattedBusinessModel,
+          revenueModel: estimatedCost ? `Estimated Cost: ${estimatedCost}` : "Commercial / Sustainable Civic Deployment",
+          sustainabilityModel: formattedSustainabilityModel,
+          currentStage: VentureStage.CONCEPT_SUBMITTED,
+        },
+        include: {
+          problem: {
+            select: {
+              id: true,
+              title: true,
+              category: true,
+              district: true,
+            },
+          },
+        },
+      });
+    } else {
+      // Create new business concept with full proposal
+      concept = await prisma.businessConcept.create({
+        data: {
+          problemId,
+          startupId: req.user.organizationId,
+          solutionDescription: formattedSolutionDescription,
+          targetBeneficiaries: `Citizens and community stakeholders in ${problem.district}`,
+          marketSize: solutionName,
+          businessModel: formattedBusinessModel,
+          revenueModel: estimatedCost ? `Estimated Cost: ${estimatedCost}` : "Commercial / Sustainable Civic Deployment",
+          sustainabilityModel: formattedSustainabilityModel,
+          currentStage: VentureStage.CONCEPT_SUBMITTED,
+        },
+        include: {
+          problem: {
+            select: {
+              id: true,
+              title: true,
+              category: true,
+              district: true,
+            },
+          },
+        },
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Solution proposal submitted successfully.",
+      concept,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to submit solution proposal.",
       details: error.message,
     });
   }

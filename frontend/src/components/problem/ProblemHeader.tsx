@@ -11,7 +11,6 @@ import {
   Layers,
   Copy,
   CheckCircle2,
-  XCircle,
 } from "lucide-react";
 import { PriorityTier, VerificationStatus, ProblemStatus } from "../../types";
 
@@ -121,9 +120,9 @@ export const ProblemHeader: React.FC<ProblemHeaderProps> = ({
                 Government Verified
               </span>
             ) : verificationStatus === "DECLINED_BY_GOVT" ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-800 border border-rose-200">
-                <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                Declined by Govt
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
+                Govt Review: Open for Innovation
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-800 border border-purple-200">

@@ -21,7 +21,6 @@ import {
   Sparkles,
   Info,
   Copy,
-  XCircle,
 } from "lucide-react";
 
 const JHARKHAND_DISTRICTS = [
@@ -358,7 +357,7 @@ export const ProblemBankPage: React.FC = () => {
                   <option value="">All Trust States</option>
                   <option value="AI_SCREENED">AI Screened (Actionable)</option>
                   <option value="GOVERNMENT_VERIFIED">Government Verified</option>
-                  <option value="DECLINED_BY_GOVT">Declined by Govt</option>
+                  <option value="DECLINED_BY_GOVT">Govt Review: Open for Innovation</option>
                 </select>
               </div>
 
@@ -524,8 +523,8 @@ export const ProblemBankPage: React.FC = () => {
                       </span>
                     ) : problem.verificationStatus === "DECLINED_BY_GOVT" ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-slate-200/80 px-2 py-0.5 rounded-full">
-                        <XCircle className="w-3.5 h-3.5 text-slate-500" />
-                        Govt Declined (Active)
+                        <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
+                        Govt Review: Open
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full">

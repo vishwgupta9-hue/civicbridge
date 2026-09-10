@@ -47,20 +47,15 @@ export const RequestCollabModal: React.FC<RequestCollabModalProps> = ({
     try {
       // Determine recipient vs provider
       // If we have needId, the requester is recipientOrgId (needs help), target is providerOrgId.
-      // If we have offerId, requester is providerOrgId, target is recipientOrgId.
-      const payload = needId
-        ? {
-            providerOrgId: targetOrgId,
-            recipientOrgId: user.organizationId,
-            needId,
-            terms: terms.trim(),
-          }
-        : {
-            providerOrgId: user.organizationId,
-            recipientOrgId: targetOrgId,
-            offerId,
-            terms: terms.trim(),
-          };
+      // If we have offerId and no needId, requester is providerOrgId, target is recipientOrgId.
+      const payload: any = {
+        needId: needId || undefined,
+        offerId: offerId || undefined,
+        providerOrgId: needId ? targetOrgId : user.organizationId,
+        recipientOrgId: needId ? user.organizationId : targetOrgId,
+        contributionScope: terms.trim(),
+        terms: terms.trim(),
+      };
 
       const res = await fetch(`${API_BASE_URL}/collaborations/request`, {
         method: "POST",

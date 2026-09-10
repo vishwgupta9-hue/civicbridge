@@ -1,4 +1,26 @@
-import { PrismaClient, Role, OrganizationType, PriorityTier, VerificationStatus, ProblemStatus, FilterStatus, SupportType, VentureStage, ProposalStatus, CollaborationStatus } from "@prisma/client";
+import {
+  PrismaClient,
+  Role,
+  OrganizationType,
+  PriorityTier,
+  VerificationStatus,
+  ProblemStatus,
+  FilterStatus,
+  SupportType,
+  VentureStage,
+  ProposalStatus,
+  CollaborationStatus,
+  ProjectTrack,
+  ProjectStatus,
+  MilestoneStatus,
+  OfferCategory,
+  NeedUrgency,
+  NeedStatus,
+  PilotStatus,
+  ClearanceStatus,
+  VerificationFinding,
+  EvidenceType,
+} from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -18,16 +40,41 @@ const SEED_IDS = {
   USER_STARTUP: "eeeeeeee-eeee-4eee-eeee-eeeeeeeeeeee",
 
   // Problems
-  PROBLEM_1: "f1111111-1111-4111-8111-111111111111", // Water / Ranchi / HIGH / GOVERNMENT_VERIFIED
-  PROBLEM_2: "f2222222-2222-4222-8222-222222222222", // Air / Dhanbad / HIGH / AI_SCREENED
-  PROBLEM_3: "f3333333-3333-4333-8333-333333333333", // Drainage / East Singhbhum / MEDIUM / GOVERNMENT_VERIFIED
-  PROBLEM_4: "f4444444-4444-4444-8444-444444444444", // Canal / Hazaribagh / MEDIUM / AI_SCREENED
-  PROBLEM_5: "f5555555-5555-4555-8555-555555555555", // Solar / Bokaro / LOW / AI_SCREENED
+  PROBLEM_1: "f1111111-1111-4111-8111-111111111111", // Water / East Singhbhum & Ranchi / HIGH / GOVERNMENT_VERIFIED
+  PROBLEM_2: "f2222222-2222-4222-8222-222222222222", // Coal Dust / Dhanbad / HIGH / AI_SCREENED
+  PROBLEM_3: "f3333333-3333-4333-8333-333333333333", // Industrial Runoff / East Singhbhum / HIGH / GOVERNMENT_VERIFIED
+  PROBLEM_4: "f4444444-4444-4444-8444-444444444444", // Canal Siltation / Hazaribagh / MEDIUM / GOVERNMENT_VERIFIED
+  PROBLEM_5: "f5555555-5555-4555-8555-555555555555", // Solar PHC Outages / Bokaro / MEDIUM / AI_SCREENED
 
-  // Children
+  // V3 Projects
+  PROJ_WATER: "a1111111-aaaa-4aaa-aaaa-111111111111",
+  PROJ_DUST: "a2222222-aaaa-4aaa-aaaa-222222222222",
+  PROJ_CANAL: "a3333333-aaaa-4aaa-aaaa-333333333333",
+  PROJ_SOLAR: "a4444444-aaaa-4aaa-aaaa-444444444444",
+
+  // V3 Offers
+  OFFER_SPECTROMETRY: "b1111111-bbbb-4bbb-bbbb-111111111111",
+  OFFER_PROTOTYPING: "b2222222-bbbb-4bbb-bbbb-222222222222",
+  OFFER_DRONE: "b3333333-bbbb-4bbb-bbbb-333333333333",
+  OFFER_ELECTRICAL: "b4444444-bbbb-4bbb-bbbb-444444444444",
+
+  // V3 Needs
+  NEED_SPECTROMETRY: "c1111111-cccc-4ccc-cccc-111111111111",
+  NEED_NOZZLES: "c2222222-cccc-4ccc-cccc-222222222222",
+  NEED_DRONE: "c3333333-cccc-4ccc-cccc-333333333333",
+  NEED_BATTERY_TEST: "c4444444-cccc-4ccc-cccc-444444444444",
+
+  // V3 Collaborations
+  COLLAB_WATER: "99999999-9999-4999-a999-999999999999",
+  COLLAB_DUST: "98888888-9999-4999-a999-999999999999",
+
+  // V3 Pilots
+  PILOT_WATER: "d1111111-dddd-4ddd-dddd-111111111111",
+  PILOT_DUST: "d2222222-dddd-4ddd-dddd-222222222222",
+
+  // Legacy Children
   PROPOSAL_1: "77777777-7777-4777-a777-777777777777",
   CONCEPT_1: "88888888-8888-4888-a888-888888888888",
-  COLLAB_1: "99999999-9999-4999-a999-999999999999",
   UPDATE_PROPOSAL: "66666666-6666-4666-a666-666666666666",
   UPDATE_CONCEPT: "55555555-5555-4555-a555-555555555555",
   SUPPORT_REQ_1: "44444444-4444-4444-a444-444444444444",
@@ -42,7 +89,6 @@ export const DEV_PASSWORDS = {
   STARTUP: "StartupPass123!",
 };
 
-// 12 salt rounds per project specification (TRD.md / USER_FLOW.md)
 const BCRYPT_SALT_ROUNDS = 12;
 
 const DEV_HASHES = {
@@ -54,23 +100,27 @@ const DEV_HASHES = {
 };
 
 async function main() {
-  console.log("🌱 Starting CivicBridge Development Seed...");
+  console.log("🌱 Starting CivicBridge Connected V3 Seed Ecosystem...");
 
   // =========================================================================
-  // 1. ORGANIZATIONS (University, Industry, Startup)
+  // 1. ORGANIZATIONS
   // =========================================================================
   console.log("  → Upserting Organizations...");
 
   const orgUniversity = await prisma.organization.upsert({
     where: { id: SEED_IDS.ORG_UNIVERSITY },
-    update: {},
+    update: {
+      name: "Birla Institute of Technology (BIT) Mesra",
+      domainTags: ["Environmental Engineering", "IoT & Sensing", "Civil Works", "Water Purification"],
+      expertiseTags: ["Water Quality Analysis", "Embedded Systems", "GIS Mapping", "Adsorption Columns"],
+    },
     create: {
       id: SEED_IDS.ORG_UNIVERSITY,
       name: "Birla Institute of Technology (BIT) Mesra",
       type: OrganizationType.UNIVERSITY,
       regCode: "AICTE-JH-00123",
-      domainTags: ["Environmental Engineering", "IoT & Sensing", "Civil Works"],
-      expertiseTags: ["Water Quality Analysis", "Embedded Systems", "GIS Mapping"],
+      domainTags: ["Environmental Engineering", "IoT & Sensing", "Civil Works", "Water Purification"],
+      expertiseTags: ["Water Quality Analysis", "Embedded Systems", "GIS Mapping", "Adsorption Columns"],
       district: "Ranchi",
       state: "Jharkhand",
       contactEmail: "rnd@bitmesra.ac.in",
@@ -80,14 +130,18 @@ async function main() {
 
   const orgIndustry = await prisma.organization.upsert({
     where: { id: SEED_IDS.ORG_INDUSTRY },
-    update: {},
+    update: {
+      name: "Tata Steel CSR & Sustainability Division",
+      domainTags: ["Clean Tech", "Rural Infrastructure", "Industrial Waste", "Environmental Testing"],
+      expertiseTags: ["Prototyping Labs", "Pilot Testing Facilities", "Mentorship", "Spectrometry Analysis"],
+    },
     create: {
       id: SEED_IDS.ORG_INDUSTRY,
       name: "Tata Steel CSR & Sustainability Division",
       type: OrganizationType.INDUSTRY,
       regCode: "CIN-L27100MH1907PLC000260",
-      domainTags: ["Clean Tech", "Rural Infrastructure", "Industrial Waste"],
-      expertiseTags: ["Prototyping Labs", "Pilot Testing Facilities", "Mentorship"],
+      domainTags: ["Clean Tech", "Rural Infrastructure", "Industrial Waste", "Environmental Testing"],
+      expertiseTags: ["Prototyping Labs", "Pilot Testing Facilities", "Mentorship", "Spectrometry Analysis"],
       district: "East Singhbhum",
       state: "Jharkhand",
       contactEmail: "sustainability@tatasteel.com",
@@ -97,14 +151,18 @@ async function main() {
 
   const orgStartup = await prisma.organization.upsert({
     where: { id: SEED_IDS.ORG_STARTUP },
-    update: {},
+    update: {
+      name: "JharJal CleanTech Innovations Pvt Ltd",
+      domainTags: ["Clean Drinking Water", "Affordable Filtration", "IoT Monitoring", "Dust Suppression"],
+      expertiseTags: ["Adsorption Technology", "Low-Cost Sensors", "Community Distribution", "Fog Cannons"],
+    },
     create: {
       id: SEED_IDS.ORG_STARTUP,
       name: "JharJal CleanTech Innovations Pvt Ltd",
       type: OrganizationType.STARTUP,
       regCode: "DPIIT-JH-2024-8891",
-      domainTags: ["Clean Drinking Water", "Affordable Filtration", "IoT Monitoring"],
-      expertiseTags: ["Adsorption Technology", "Low-Cost Sensors", "Community Distribution"],
+      domainTags: ["Clean Drinking Water", "Affordable Filtration", "IoT Monitoring", "Dust Suppression"],
+      expertiseTags: ["Adsorption Technology", "Low-Cost Sensors", "Community Distribution", "Fog Cannons"],
       district: "Ranchi",
       state: "Jharkhand",
       contactEmail: "contact@jharjal.in",
@@ -127,7 +185,7 @@ async function main() {
       passwordHash: DEV_HASHES.CITIZEN,
       role: Role.CITIZEN,
       phone: "+91-9876543210",
-      district: "Ranchi",
+      district: "East Singhbhum",
     },
   });
 
@@ -147,7 +205,7 @@ async function main() {
 
   const userUniversity = await prisma.user.upsert({
     where: { id: SEED_IDS.USER_UNIVERSITY },
-    update: { passwordHash: DEV_HASHES.UNIVERSITY },
+    update: { passwordHash: DEV_HASHES.UNIVERSITY, organizationId: orgUniversity.id },
     create: {
       id: SEED_IDS.USER_UNIVERSITY,
       name: "Dr. Ananya Mukhopadhyay",
@@ -162,7 +220,7 @@ async function main() {
 
   const userIndustry = await prisma.user.upsert({
     where: { id: SEED_IDS.USER_INDUSTRY },
-    update: { passwordHash: DEV_HASHES.INDUSTRY },
+    update: { passwordHash: DEV_HASHES.INDUSTRY, organizationId: orgIndustry.id },
     create: {
       id: SEED_IDS.USER_INDUSTRY,
       name: "Vikram Sengupta (CSR Lead)",
@@ -177,7 +235,7 @@ async function main() {
 
   const userStartup = await prisma.user.upsert({
     where: { id: SEED_IDS.USER_STARTUP },
-    update: { passwordHash: DEV_HASHES.STARTUP },
+    update: { passwordHash: DEV_HASHES.STARTUP, organizationId: orgStartup.id },
     create: {
       id: SEED_IDS.USER_STARTUP,
       name: "Amit Kumar Murmu (Founder)",
@@ -191,373 +249,776 @@ async function main() {
   });
 
   // =========================================================================
-  // 3. CIVIC PROBLEMS & AI ANALYSIS (5 realistic problems)
-  //
-  // Approved Formula:
-  // Priority Score = (Severity*0.25) + (AffectedPeople*0.25) + (Frequency*0.15) + (Evidence*0.15) + (Urgency*0.20)
-  // Tiers: HIGH (70–100), MEDIUM (40–69), LOW (0–39)
+  // 3. CIVIC PROBLEMS & AI SCREENING
   // =========================================================================
-  console.log("  → Upserting 5 Civic Problems with AI Analysis...");
+  console.log("  → Upserting 5 Civic Problems...");
 
-  // Problem 1: Water Contamination / Ranchi (HIGH: 83.5 / GOVERNMENT_VERIFIED)
-  // Severity=85, Affected=80, Frequency=90, Evidence=85, Urgency=80
-  // Score: (85*0.25) + (80*0.25) + (90*0.15) + (85*0.15) + (80*0.20) = 21.25 + 20.0 + 13.5 + 12.75 + 16.0 = 83.5
+  // Problem 1: Water Contamination / East Singhbhum (HIGH / GOVERNMENT_VERIFIED)
+  const problem1Data = {
+    title: "Severe Chemical Runoff and Toxic Water Discoloration in Subarnarekha Tributary",
+    description: "Community drinking water handpumps across 4 villages in Potka block are dispensing water with fluoride levels exceeding 3.5 mg/L and heavy metal leaching. Over 1,500 villagers and school children report joint pain, dental fluorosis, and gastrointestinal symptoms. Urgent filtration and decentralized water monitoring needed.",
+    category: "Water & Sanitation",
+    subCategory: "Drinking Water Contamination",
+    district: "East Singhbhum",
+    locationText: "Potka Block, Villages: Baredih, Nawagarh, Rajaulatu",
+    latitude: 22.6186,
+    longitude: 86.2238,
+    affectedCount: 1500,
+    evidenceUrl: "https://storage.civicbridge.jharkhand.gov.in/evidence/e_singhbhum_water_test_2026.pdf",
+    status: ProblemStatus.IN_PROGRESS,
+    filterStatus: FilterStatus.PASSED,
+    filterReason: "Severe environmental and public health crisis confirmed by initial testing.",
+    priorityScore: 88.0,
+    priorityTier: PriorityTier.HIGH,
+    verificationStatus: VerificationStatus.GOVERNMENT_VERIFIED,
+    verificationNotes: "Verified on-site by Potka BDO and District PHED team. Chemical analysis confirms hazardous fluoride and heavy metal levels.",
+    verifiedAt: new Date("2026-03-01T10:30:00Z"),
+    verifiedById: userAdmin.id,
+    verificationRequested: true,
+    submittedById: userCitizen.id,
+  };
+
   const problem1 = await prisma.problem.upsert({
     where: { id: SEED_IDS.PROBLEM_1 },
-    update: {},
+    update: problem1Data,
     create: {
       id: SEED_IDS.PROBLEM_1,
-      title: "Excess Fluoride and Heavy Metal Contamination in Angara Block Borewells",
-      description: "Community drinking water handpumps across 4 villages in Angara block are dispensing water with fluoride levels exceeding 3.5 mg/L. Over 1,200 villagers and school children report joint pain, dental fluorosis, and gastrointestinal symptoms. Immediate filtration and decentralized testing are required.",
-      category: "Water & Sanitation",
-      subCategory: "Drinking Water Contamination",
-      district: "Ranchi",
-      locationText: "Angara Block, Villages: Nawagarh, Baredih, Rajaulatu",
-      latitude: 23.3644,
-      longitude: 85.5298,
-      affectedCount: 1200,
-      evidenceUrl: "https://storage.civicbridge.jharkhand.gov.in/evidence/ranchi_water_test_2026.pdf",
-      status: ProblemStatus.IN_PROGRESS,
-      filterStatus: FilterStatus.PASSED,
-      filterReason: "Clear civic problem with severe public health impact and supporting water test lab reports.",
-      priorityScore: 83.5,
-      priorityTier: PriorityTier.HIGH,
-      verificationStatus: VerificationStatus.GOVERNMENT_VERIFIED,
-      verificationNotes: "Verified on-site by District Public Health Engineering Department (PHED) team. Chemical analysis confirms hazardous fluoride levels.",
-      verifiedAt: new Date("2026-03-01T10:30:00Z"),
-      verifiedById: userAdmin.id,
-      verificationRequested: true,
-      submittedById: userCitizen.id,
+      ...problem1Data,
     },
   });
+
+  const aiAnalysis1Data = {
+    predictedCategory: "Water & Sanitation",
+    confidenceScore: 0.96,
+    aiSummary: "High-priority groundwater fluoride and heavy metal contamination across Potka villages causing acute fluorosis among ~1,500 residents.",
+    severityScore: 90,
+    affectedPeopleScore: 85,
+    frequencyScore: 90,
+    evidenceScore: 88,
+    urgencyScore: 85,
+    aiUrgencyScore: 9,
+    aiUrgencyReason: "Toxic effluent directly ingested by rural population with zero alternative water source.",
+    rootCauseHypotheses: [
+      "Unlined industrial settling pond seepage into shallow aquifers.",
+      "Geogenic bedrock fluoride leaching accelerated by deep drilling.",
+      "Absence of community-level activated alumina filtration systems."
+    ],
+    requiredExpertise: ["Environmental Engineering", "Water Adsorption Media", "Colorimetric IoT Telemetry"],
+    departmentHints: ["Drinking Water & Sanitation Department (DWSD)", "Public Health Engineering Department (PHED)"],
+  };
 
   await prisma.aIAnalysis.upsert({
     where: { problemId: problem1.id },
-    update: {
-      rootCauseHypotheses: [
-        "Geogenic bedrock fluoride leaching into deep aquifers.",
-        "Over-extraction of groundwater depleting shallow recharge zones.",
-        "Lack of community-level activated alumina filtration systems."
-      ],
-      requiredExpertise: ["Environmental Engineering", "Water Quality Chemistry", "Hydrogeology"],
-      departmentHints: ["Drinking Water & Sanitation Department (DWSD)", "Public Health Engineering Department (PHED)"],
-    },
+    update: aiAnalysis1Data,
     create: {
       problemId: problem1.id,
-      predictedCategory: "Water & Sanitation",
-      confidenceScore: 0.96,
-      aiSummary: "High-priority groundwater fluoride contamination across multiple Angara villages causing acute dental and skeletal fluorosis among ~1,200 residents.",
-      severityScore: 85,
-      affectedPeopleScore: 80,
-      frequencyScore: 90,
-      evidenceScore: 85,
-      urgencyScore: 80,
-      aiUrgencyScore: 9,
-      aiUrgencyReason: "Potentially toxic fluoride intake requires urgent clean water access to prevent irreversible pediatric skeletal deformities.",
-      isDuplicate: false,
-      rootCauseHypotheses: [
-        "Geogenic bedrock fluoride leaching into deep aquifers.",
-        "Over-extraction of groundwater depleting shallow recharge zones.",
-        "Lack of community-level activated alumina filtration systems."
-      ],
-      requiredExpertise: ["Environmental Engineering", "Water Quality Chemistry", "Hydrogeology"],
-      departmentHints: ["Drinking Water & Sanitation Department (DWSD)", "Public Health Engineering Department (PHED)"],
+      ...aiAnalysis1Data,
     },
   });
 
-  await prisma.validation.upsert({
-    where: { problemId: problem1.id },
-    update: {},
-    create: {
-      problemId: problem1.id,
-      reviewedById: userAdmin.id,
-      severityScore: 85,
-      affectedScore: 80,
-      frequencyScore: 90,
-      evidenceScore: 85,
-      urgencyScore: 80,
-      decision: VerificationStatus.GOVERNMENT_VERIFIED,
-      remarks: "Field inspection confirmed by PHED Ranchi. Safe alternative tankers dispatched pending institutional water filtration unit installation.",
-    },
-  });
-
-  // Problem 2: Air Pollution / Dhanbad (HIGH: 86.0 / AI_SCREENED)
-  // Severity=90, Affected=75, Frequency=95, Evidence=90, Urgency=85
-  // Score: (90*0.25) + (75*0.25) + (95*0.15) + (90*0.15) + (85*0.20) = 22.5 + 18.75 + 14.25 + 13.5 + 17.0 = 86.0
+  // Problem 2: Fugitive Coal Dust / Dhanbad (HIGH / AI_SCREENED)
   const problem2 = await prisma.problem.upsert({
     where: { id: SEED_IDS.PROBLEM_2 },
     update: {},
     create: {
       id: SEED_IDS.PROBLEM_2,
-      title: "Severe Coal Dust Dispersion along Jharia-Sindri Haul Road Corridor",
-      description: "Uncovered dumper trucks transporting raw coking coal generate dense particulate clouds exceeding PM2.5 levels of 380 ug/m3 throughout daytime transit hours. Over 800 households and 2 primary schools along the 6km stretch suffer severe respiratory illnesses.",
-      category: "Environment & Pollution",
-      subCategory: "Air Quality & Industrial Dust",
+      title: "Severe Fugitive Coal Dust and Particulate Pollution along Haulage Corridor",
+      description: "Over 2,400 residents, school children, and roadside vendors along the Jharia-Sindri coal transport corridor are exposed to PM10 levels exceeding 380 ug/m3. Uncovered coal dumpers generate intense dust clouds throughout day and night. Acute respiratory distress and asthma cases reported.",
+      category: "Environment & Forest",
+      subCategory: "Air Quality Degradation",
       district: "Dhanbad",
-      locationText: "Jharia-Sindri Link Road, Near Bastacola Crossing",
-      latitude: 23.7423,
-      longitude: 86.4172,
-      affectedCount: 800,
-      evidenceUrl: "https://storage.civicbridge.jharkhand.gov.in/evidence/dhanbad_air_sensor_log.pdf",
+      locationText: "Jharia-Sindri Main Road, Bastacola Crossing",
+      latitude: 23.7523,
+      longitude: 86.4258,
+      affectedCount: 2400,
+      evidenceUrl: "https://storage.civicbridge.jharkhand.gov.in/evidence/dhanbad_pm10_sensor_data.pdf",
       status: ProblemStatus.OPEN,
       filterStatus: FilterStatus.PASSED,
-      filterReason: "Legitimate environmental hazard with empirical sensor metrics and photographic evidence.",
-      priorityScore: 86.0,
+      filterReason: "Severe continuous particulate exposure affecting dense residential settlements.",
+      priorityScore: 82.0,
       priorityTier: PriorityTier.HIGH,
-      verificationStatus: VerificationStatus.AI_SCREENED, // Parallel trust model: immediately visible even before govt verification
-      verificationRequested: true,
+      verificationStatus: VerificationStatus.AI_SCREENED,
       submittedById: userCitizen.id,
     },
   });
 
   await prisma.aIAnalysis.upsert({
     where: { problemId: problem2.id },
-    update: {
-      rootCauseHypotheses: [
-        "Uncovered heavy transit of raw coking coal on non-tarred arterial link roads.",
-        "Absence of automated dust-suppression mist cannons at critical transit crossings.",
-        "High wind dispersal during peak afternoon transport hours."
-      ],
-      requiredExpertise: ["Aerosol Science", "Air Quality Engineering", "Transportation Systems"],
-      departmentHints: ["Jharkhand State Pollution Control Board (JSPCB)", "Department of Mines and Geology"],
-    },
+    update: {},
     create: {
       problemId: problem2.id,
-      predictedCategory: "Environment & Pollution",
+      predictedCategory: "Environment & Forest",
       confidenceScore: 0.94,
-      aiSummary: "Critical fugitive coal dust emissions along Jharia transit corridor elevating hazardous PM2.5 levels for 800 residential dwellings.",
-      severityScore: 90,
-      affectedPeopleScore: 75,
-      frequencyScore: 95,
-      evidenceScore: 90,
-      urgencyScore: 85,
-      aiUrgencyScore: 9,
-      aiUrgencyReason: "Extreme particulate exposure poses immediate chronic obstructive pulmonary risk to school children and residents.",
-      isDuplicate: false,
+      aiSummary: "Continuous hazardous PM10 coal dust dispersion along 12km haul road affecting 2,400 residents.",
+      severityScore: 85,
+      affectedPeopleScore: 88,
+      frequencyScore: 92,
+      evidenceScore: 78,
+      urgencyScore: 75,
+      aiUrgencyScore: 8,
+      aiUrgencyReason: "High respiratory morbidity among children and school students along the transit corridor.",
       rootCauseHypotheses: [
-        "Uncovered heavy transit of raw coking coal on non-tarred arterial link roads.",
-        "Absence of automated dust-suppression mist cannons at critical transit crossings.",
-        "High wind dispersal during peak afternoon transport hours."
+        "Uncovered haulage trucks transporting dry coal.",
+        "Lack of continuous boundary mist cannons at transit checkpoints.",
+        "Absence of biodegradable dust binding spray on road shoulders."
       ],
-      requiredExpertise: ["Aerosol Science", "Air Quality Engineering", "Transportation Systems"],
-      departmentHints: ["Jharkhand State Pollution Control Board (JSPCB)", "Department of Mines and Geology"],
+      requiredExpertise: ["Aerosol Fluid Dynamics", "Industrial Fogging Systems", "Air Quality Telemetry"],
+      departmentHints: ["Jharkhand State Pollution Control Board (JSPCB)", "Mines & Geology Department"],
     },
   });
 
-  // Problem 3: Stormwater Drainage / East Singhbhum (MEDIUM: 55.25 / GOVERNMENT_VERIFIED)
-  // Severity=60, Affected=55, Frequency=40, Evidence=70, Urgency=50
-  // Score: (60*0.25) + (55*0.25) + (40*0.15) + (70*0.15) + (50*0.20) = 15.0 + 13.75 + 6.0 + 10.5 + 10.0 = 55.25
-  const problem3 = await prisma.problem.upsert({
-    where: { id: SEED_IDS.PROBLEM_3 },
-    update: {},
-    create: {
-      id: SEED_IDS.PROBLEM_3,
-      title: "Chronic Monsoon Waterlogging at Bagbera Railway Colony Underpass",
-      description: "Silt accumulation and inadequate culvert discharge capacity cause 4-foot water stagnation during moderate rains, cutting off vehicular transit for 450 daily commuters and preventing emergency vehicles from reaching Bagbera colony.",
-      category: "Civic Infrastructure",
-      subCategory: "Urban Drainage & Road Access",
-      district: "East Singhbhum",
-      locationText: "Bagbera Underpass, Jamshedpur",
-      latitude: 22.7844,
-      longitude: 86.1956,
-      affectedCount: 450,
-      evidenceUrl: "https://storage.civicbridge.jharkhand.gov.in/evidence/bagbera_drainage_photo.jpg",
-      status: ProblemStatus.OPEN,
-      filterStatus: FilterStatus.PASSED,
-      filterReason: "Valid civic infrastructure blockage with clear geographic and seasonal impact.",
-      priorityScore: 55.25,
-      priorityTier: PriorityTier.MEDIUM,
-      verificationStatus: VerificationStatus.GOVERNMENT_VERIFIED,
-      verificationNotes: "Confirmed by Jamshedpur Notified Area Committee (JNAC). De-siltation required before pre-monsoon showers.",
-      verifiedAt: new Date("2026-03-03T14:00:00Z"),
-      verifiedById: userAdmin.id,
-      verificationRequested: true,
-      submittedById: userCitizen.id,
-    },
-  });
-
-  await prisma.aIAnalysis.upsert({
-    where: { problemId: problem3.id },
-    update: {
-      rootCauseHypotheses: [
-        "Heavy silt and plastic debris clogging stormwater culvert outlets.",
-        "Inadequate gradient slope leading to reverse water stagnation during rainfall.",
-        "Encroachment on natural catchment drainage channels."
-      ],
-      requiredExpertise: ["Civil Infrastructure Engineering", "Urban Hydrology", "Municipal Sanitation"],
-      departmentHints: ["Urban Development & Housing Department", "Jamshedpur Notified Area Committee (JNAC)"],
-    },
-    create: {
-      problemId: problem3.id,
-      predictedCategory: "Civic Infrastructure",
-      confidenceScore: 0.91,
-      aiSummary: "Recurrent underpass flooding obstructing daily transit and ambulance access for 450 residents in Bagbera.",
-      severityScore: 60,
-      affectedPeopleScore: 55,
-      frequencyScore: 40,
-      evidenceScore: 70,
-      urgencyScore: 50,
-      aiUrgencyScore: 5,
-      aiUrgencyReason: "Seasonal obstacle requiring structural silt-trap and pumping solution before peak monsoon.",
-      isDuplicate: false,
-      rootCauseHypotheses: [
-        "Heavy silt and plastic debris clogging stormwater culvert outlets.",
-        "Inadequate gradient slope leading to reverse water stagnation during rainfall.",
-        "Encroachment on natural catchment drainage channels."
-      ],
-      requiredExpertise: ["Civil Infrastructure Engineering", "Urban Hydrology", "Municipal Sanitation"],
-      departmentHints: ["Urban Development & Housing Department", "Jamshedpur Notified Area Committee (JNAC)"],
-    },
-  });
-
-  await prisma.validation.upsert({
-    where: { problemId: problem3.id },
-    update: {},
-    create: {
-      problemId: problem3.id,
-      reviewedById: userAdmin.id,
-      severityScore: 60,
-      affectedScore: 55,
-      frequencyScore: 40,
-      evidenceScore: 70,
-      urgencyScore: 50,
-      decision: VerificationStatus.GOVERNMENT_VERIFIED,
-      remarks: "Field visit completed with municipal engineer. Drain elevation re-alignment recommended.",
-    },
-  });
-
-  // Problem 4: Irrigation Canal Sluice Gate / Hazaribagh (MEDIUM: 56.0 / AI_SCREENED)
-  // Severity=65, Affected=45, Frequency=50, Evidence=60, Urgency=60
-  // Score: (65*0.25) + (45*0.25) + (50*0.15) + (60*0.15) + (60*0.20) = 16.25 + 11.25 + 7.5 + 9.0 + 12.0 = 56.0
+  // Problem 4: Canal Siltation & Tail-End Irrigation / Hazaribagh (MEDIUM / GOVERNMENT_VERIFIED)
   const problem4 = await prisma.problem.upsert({
     where: { id: SEED_IDS.PROBLEM_4 },
     update: {},
     create: {
       id: SEED_IDS.PROBLEM_4,
-      title: "Broken Sluice Gate Causing Silt Inundation in Ichak Branch Canal",
-      description: "A damaged mechanical gear on the sub-branch canal sluice gate prevents water flow regulation, causing unseasonal inundation in 18 hectares of vegetable fields while starving downstream paddy plots of irrigation water.",
-      category: "Agriculture & Irrigation",
-      subCategory: "Canal & Water Flow Control",
+      title: "Critical Canal Breach and Tail-End Siltation Depriving Katkamsandi Farms",
+      description: "The Konar Left Bank distribution canal in Katkamsandi block has suffered extensive silt accumulation and a broken regulator gate. Water does not reach tail-end farmers in 3 panchayats, resulting in drought distress across 950 smallholder farming families.",
+      category: "Agriculture & Rural Development",
+      subCategory: "Irrigation Infrastructure",
       district: "Hazaribagh",
-      locationText: "Ichak Canal Outlet No. 4, Ichak Block",
-      latitude: 24.1124,
-      longitude: 85.4056,
-      affectedCount: 220,
-      evidenceUrl: "https://storage.civicbridge.jharkhand.gov.in/evidence/ichak_sluice_gate.jpg",
+      locationText: "Katkamsandi Block, Canal RD 14.5 to 22.0",
+      latitude: 24.0542,
+      longitude: 85.2719,
+      affectedCount: 950,
       status: ProblemStatus.OPEN,
       filterStatus: FilterStatus.PASSED,
-      filterReason: "Verifiable agricultural infrastructure fault impacting farmer livelihoods.",
-      priorityScore: 56.0,
+      filterReason: "Authentic agricultural infrastructure failure directly endangering smallholder food security.",
+      priorityScore: 65.0,
       priorityTier: PriorityTier.MEDIUM,
-      verificationStatus: VerificationStatus.AI_SCREENED,
-      verificationRequested: false,
+      verificationStatus: VerificationStatus.GOVERNMENT_VERIFIED,
+      verificationNotes: "Inspected by Assistant Engineer, Minor Irrigation Division Hazaribagh. Silt depth benchmarked at 1.4 meters.",
+      verifiedAt: new Date("2026-03-05T14:00:00Z"),
+      verifiedById: userAdmin.id,
       submittedById: userCitizen.id,
     },
   });
 
   await prisma.aIAnalysis.upsert({
     where: { problemId: problem4.id },
-    update: {
-      rootCauseHypotheses: [
-        "Mechanical gear stripping on secondary sluice regulator gate.",
-        "Absence of periodic desiltation along canal bed diverting water into farmlands.",
-        "Lack of remote telemetry water-level gate position sensors."
-      ],
-      requiredExpertise: ["Irrigation Engineering", "Mechanical Maintenance", "Hydraulics"],
-      departmentHints: ["Water Resources Department", "Department of Agriculture and Sugarcane Development"],
-    },
+    update: {},
     create: {
       problemId: problem4.id,
-      predictedCategory: "Agriculture & Irrigation",
-      confidenceScore: 0.89,
-      aiSummary: "Faulty canal sluice mechanism causing localized field flooding and downstream water deprivation for 220 smallholder farmers.",
+      predictedCategory: "Agriculture & Rural Development",
+      confidenceScore: 0.91,
+      aiSummary: "Irrigation delivery blocked to 950 farming households due to canal bed sedimentation and manual sluice control failure.",
       severityScore: 65,
-      affectedPeopleScore: 45,
-      frequencyScore: 50,
-      evidenceScore: 60,
-      urgencyScore: 60,
+      affectedPeopleScore: 70,
+      frequencyScore: 60,
+      evidenceScore: 72,
+      urgencyScore: 65,
       aiUrgencyScore: 6,
-      aiUrgencyReason: "Crop damage risks escalate with each delayed irrigation cycle during sowing season.",
-      isDuplicate: false,
+      aiUrgencyReason: "Kharif crop planting window approaching within 60 days.",
       rootCauseHypotheses: [
-        "Mechanical gear stripping on secondary sluice regulator gate.",
-        "Absence of periodic desiltation along canal bed diverting water into farmlands.",
-        "Lack of remote telemetry water-level gate position sensors."
+        "Upstream catchment soil erosion washing silt into canal bed.",
+        "Manual sluice gate rusted shut causing headwater overflow.",
+        "Lack of real-time flow telemetry to detect tail-end drying."
       ],
-      requiredExpertise: ["Irrigation Engineering", "Mechanical Maintenance", "Hydraulics"],
-      departmentHints: ["Water Resources Department", "Department of Agriculture and Sugarcane Development"],
+      requiredExpertise: ["Hydraulic Engineering", "Bathymetry & Drone GIS", "Automated Sluice Controls"],
+      departmentHints: ["Water Resources Department", "Agriculture Department"],
     },
   });
 
-  // Problem 5: Solar Streetlights / Bokaro (LOW: 35.75 / AI_SCREENED)
-  // Severity=35, Affected=30, Frequency=40, Evidence=50, Urgency=30
-  // Score: (35*0.25) + (30*0.25) + (40*0.15) + (50*0.15) + (30*0.20) = 8.75 + 7.5 + 6.0 + 7.5 + 6.0 = 35.75
+  // Problem 5: Solar PHC Outages / Bokaro (MEDIUM / AI_SCREENED)
   const problem5 = await prisma.problem.upsert({
     where: { id: SEED_IDS.PROBLEM_5 },
     update: {},
     create: {
       id: SEED_IDS.PROBLEM_5,
-      title: "Faulty Battery Units on Solar Streetlights on Chas-Petarwar Rural Road",
-      description: "Three solar streetlights installed outside the Chandankyari health sub-centre have non-functional lithium batteries, leaving a 200m approach lane unlit after 6:30 PM.",
-      category: "Public Safety & Lighting",
-      subCategory: "Rural Solar Lighting",
+      title: "Frequent Battery Inverter Failures at Chandankiyari Primary Health Centre",
+      description: "The 10 kW rooftop solar microgrid at Chandankiyari PHC suffers from rapid battery bank overheating and inverter trip-offs. Vaccine cold chain refrigerators and emergency maternal delivery rooms face frequent blackouts during hot afternoons.",
+      category: "Public Health & Sanitation",
+      subCategory: "Healthcare Energy Reliability",
       district: "Bokaro",
-      locationText: "Approach Road to Chandankyari Sub-Centre, Chas Block",
-      latitude: 23.6341,
-      longitude: 86.1789,
-      affectedCount: 90,
-      evidenceUrl: "https://storage.civicbridge.jharkhand.gov.in/evidence/solar_battery_damage.jpg",
+      locationText: "Chandankiyari Block PHC, Main Hospital Compound",
+      latitude: 23.5742,
+      longitude: 86.3489,
+      affectedCount: 650,
       status: ProblemStatus.OPEN,
       filterStatus: FilterStatus.PASSED,
-      filterReason: "Civic lighting issue with modest affected scope and clear remedy.",
-      priorityScore: 35.75,
-      priorityTier: PriorityTier.LOW,
+      filterReason: "Critical rural healthcare facility power failure affecting immunization cold storage.",
+      priorityScore: 58.0,
+      priorityTier: PriorityTier.MEDIUM,
       verificationStatus: VerificationStatus.AI_SCREENED,
-      verificationRequested: false,
       submittedById: userCitizen.id,
     },
   });
 
   await prisma.aIAnalysis.upsert({
     where: { problemId: problem5.id },
-    update: {
-      rootCauseHypotheses: [
-        "Premature thermal degradation of lithium ferro-phosphate battery units.",
-        "Lack of preventive scheduled battery maintenance contract.",
-        "Dust accumulation reducing solar panel charging efficiency."
-      ],
-      requiredExpertise: ["Electrical Engineering", "Solar Photovoltaic Systems", "Battery Energy Storage"],
-      departmentHints: ["Jharkhand Renewable Energy Development Agency (JREDA)", "Energy Department"],
-    },
+    update: {},
     create: {
       problemId: problem5.id,
-      predictedCategory: "Public Safety & Lighting",
-      confidenceScore: 0.93,
-      aiSummary: "Non-operational solar battery units leaving hospital approach road unlit for approximately 90 night-time clinic visitors.",
-      severityScore: 35,
-      affectedPeopleScore: 30,
-      frequencyScore: 40,
-      evidenceScore: 50,
-      urgencyScore: 30,
-      aiUrgencyScore: 3,
-      aiUrgencyReason: "Low physical hazard; standard component replacement required.",
-      isDuplicate: false,
+      predictedCategory: "Public Health & Sanitation",
+      confidenceScore: 0.89,
+      aiSummary: "Thermal degradation and unmonitored BMS failures causing vaccine cold-chain disruption at rural PHC.",
+      severityScore: 60,
+      affectedPeopleScore: 55,
+      frequencyScore: 65,
+      evidenceScore: 55,
+      urgencyScore: 55,
+      aiUrgencyScore: 6,
+      aiUrgencyReason: "Vaccine batches risk spoilage if cold storage temperature exceeds 8 degrees Celsius.",
       rootCauseHypotheses: [
-        "Premature thermal degradation of lithium ferro-phosphate battery units.",
-        "Lack of preventive scheduled battery maintenance contract.",
-        "Dust accumulation reducing solar panel charging efficiency."
+        "Lead-acid battery cell imbalance and lack of thermal management.",
+        "Absence of remote cellular IoT inverter monitoring."
       ],
-      requiredExpertise: ["Electrical Engineering", "Solar Photovoltaic Systems", "Battery Energy Storage"],
-      departmentHints: ["Jharkhand Renewable Energy Development Agency (JREDA)", "Energy Department"],
+      requiredExpertise: ["Renewable Energy Systems", "Battery Management (BMS)", "Thermal Telemetry"],
+      departmentHints: ["Health, Medical Education & Family Welfare", "JREDA"],
     },
   });
 
   // =========================================================================
-  // 4. UNIVERSITY PROPOSAL (Attached to Problem 1 - Water Contamination)
+  // 4. V3 CAPABILITY OFFERS (Resource Exchange)
   // =========================================================================
-  console.log("  → Upserting University Proposal...");
+  console.log("  → Upserting Capability & Resource Offers...");
 
-  const proposal1 = await prisma.proposal.upsert({
+  const offerSpectrometry = await prisma.offer.upsert({
+    where: { id: SEED_IDS.OFFER_SPECTROMETRY },
+    update: {},
+    create: {
+      id: SEED_IDS.OFFER_SPECTROMETRY,
+      providerOrgId: orgIndustry.id,
+      category: OfferCategory.TESTING_ANALYSIS,
+      title: "Advanced Environmental Testing & Spectrometry Facility",
+      specifications: "Inductively Coupled Plasma Mass Spectrometry (ICP-MS), atomic absorption spectrometer (AAS), and accredited water toxicity assay laboratory available for civic university and startup projects across Jharkhand.",
+      district: "East Singhbhum",
+      capacityTerms: "Supports up to 5 pilot project sample batches per quarter. Samples processed within 72 hours.",
+      status: "ACTIVE",
+    },
+  });
+
+  const offerPrototyping = await prisma.offer.upsert({
+    where: { id: SEED_IDS.OFFER_PROTOTYPING },
+    update: {},
+    create: {
+      id: SEED_IDS.OFFER_PROTOTYPING,
+      providerOrgId: orgIndustry.id,
+      category: OfferCategory.MANUFACTURING_FABRICATION,
+      title: "Industrial Prototyping & Flow Bench Testing Workshop",
+      specifications: "CNC machining, precision laser cutting, fluidics test rig, and nozzle atomization spray bench for mechanical dust suppression and water treatment hardware.",
+      district: "East Singhbhum",
+      capacityTerms: "Available for certified student startups and R&D research prototypes.",
+      status: "ACTIVE",
+    },
+  });
+
+  const offerDrone = await prisma.offer.upsert({
+    where: { id: SEED_IDS.OFFER_DRONE },
+    update: {},
+    create: {
+      id: SEED_IDS.OFFER_DRONE,
+      providerOrgId: orgUniversity.id,
+      category: OfferCategory.FACILITY_SITE_ACCESS,
+      title: "Geospatial Survey Drones & Bathymetry Sonar Kit",
+      specifications: "RTK-enabled survey drone with multispectral sensor, paired with lightweight remote acoustic bathymetry sonar for canal and reservoir silt depth profiling.",
+      district: "Ranchi",
+      capacityTerms: "Faculty-led field operations available on weekends and academic breaks.",
+      status: "ACTIVE",
+    },
+  });
+
+  const offerElectrical = await prisma.offer.upsert({
+    where: { id: SEED_IDS.OFFER_ELECTRICAL },
+    update: {},
+    create: {
+      id: SEED_IDS.OFFER_ELECTRICAL,
+      providerOrgId: orgUniversity.id,
+      category: OfferCategory.LAB_EQUIPMENT,
+      title: "Power Quality Analyzers & Solar Inverter Test Bench",
+      specifications: "Fluke 435 Series II power quality analyzer, programmable DC electronic load (150V/60A), and battery impedance tester for microgrid diagnostics.",
+      district: "Ranchi",
+      capacityTerms: "Bench testing available on appointment at Department of Electrical & Electronics Engineering.",
+      status: "ACTIVE",
+    },
+  });
+
+  // =========================================================================
+  // 5. V3 SOLUTION PROJECTS
+  // =========================================================================
+  console.log("  → Upserting V3 Solution Projects...");
+
+  // Project 1: Water Project (BIT Mesra, ACADEMIC_RESEARCH)
+  const projWater = await prisma.project.upsert({
+    where: { id: SEED_IDS.PROJ_WATER },
+    update: {},
+    create: {
+      id: SEED_IDS.PROJ_WATER,
+      title: "Decentralized Heavy Metal Bio-Adsorption & IoT Quality Monitoring",
+      executiveSummary: "Multi-stage decentralized filtration system combining acid-activated alumina, biochar from local agricultural biomass, and ESP32 colorimetric fluoride telemetry. Designed to treat high-fluoride and heavy-metal water directly at village community borewells without requiring grid electricity.",
+      technicalApproach: "Pre-filtration through graded silica gravel bed followed by dual activated alumina columns (contact time: 14 mins). Post-polishing via bamboo biochar adsorption. Real-time photometric fluoride sensor logs telemetry via 4G-LTE to the CivicBridge statewide platform.",
+      trackType: ProjectTrack.ACADEMIC_RESEARCH,
+      status: ProjectStatus.PILOTING,
+      leadOrgId: orgUniversity.id,
+      trackMetadata: {
+        facultyMentor: "Dr. Ananya Mukhopadhyay (Dept. of Chemical & Environmental Engineering)",
+        department: "Chemical & Environmental Engineering",
+        teamMembers: [
+          { name: "Rahul Verma", role: "Student Lead / IoT Sensor Integration", rollNo: "BTECH/CHE/2022/045" },
+          { name: "Pooja Kumari", role: "Filter Material Testing & Characterization", rollNo: "BTECH/CHE/2022/078" },
+          { name: "Alok Topno", role: "Site Survey & Community Handover", rollNo: "BTECH/CIV/2022/012" }
+        ],
+        deliverables: [
+          "3 Decentralized pilot filtration columns with 500 L/hr capacity",
+          "IoT telemetry dashboard feeding real-time fluoride levels",
+          "Community maintenance manual in Hindi and Mundari"
+        ]
+      },
+      problems: {
+        create: [
+          { problemId: problem1.id, isPrimary: true }
+        ]
+      }
+    },
+  });
+
+  // Project 2: Coal Dust Suppression (JharJal CleanTech, COMMERCIAL_VENTURE)
+  const projDust = await prisma.project.upsert({
+    where: { id: SEED_IDS.PROJ_DUST },
+    update: {},
+    create: {
+      id: SEED_IDS.PROJ_DUST,
+      title: "Solar-Powered Misting Cannons & Biodegradable Dust Binding",
+      executiveSummary: "Autonomous solar-powered high-pressure misting cannons utilizing biodegradable molasses-derived surfactant to encapsulate and settle airborne PM10 coal particles along mining haul corridors in Dhanbad.",
+      technicalApproach: "Stainless steel multi-orifice atomizing nozzles delivering 15-30 micron water droplets that match coal dust particle size. Solar inverter battery storage powers a 2.2 kW high-pressure mist pump triggered by optical dust sensor thresholds.",
+      trackType: ProjectTrack.COMMERCIAL_VENTURE,
+      status: ProjectStatus.BUILDING,
+      leadOrgId: orgStartup.id,
+      trackMetadata: {
+        businessModel: "B2G / B2B service contracts with mining logistics operators and local municipal boards",
+        targetBeneficiaries: "Over 2,400 households and school students along Jharia-Sindri transit corridor",
+        revenueModel: "Per-kilometer haul road dust suppression service fees and IoT compliance monitoring subscriptions"
+      },
+      problems: {
+        create: [
+          { problemId: problem2.id, isPrimary: true }
+        ]
+      }
+    },
+  });
+
+  // Project 3: Canal Siltation (BIT Mesra, CIVIC_INITIATIVE)
+  const projCanal = await prisma.project.upsert({
+    where: { id: SEED_IDS.PROJ_CANAL },
+    update: {},
+    create: {
+      id: SEED_IDS.PROJ_CANAL,
+      title: "Siltation Bathymetry & Solar Automated Sluice Gate Control",
+      executiveSummary: "Rapid drone topographic survey and acoustic bathymetry to map silt bottlenecks along the Konar canal, followed by retrofit installation of solar motorized screw-actuator sluice gates.",
+      technicalApproach: "UAV photogrammetric elevation mapping coupled with low-cost sonar transects to calculate desiltation earthwork volume. Solar automated actuators regulate tail-end discharge based on ultrasonic water level gauges.",
+      trackType: ProjectTrack.CIVIC_INITIATIVE,
+      status: ProjectStatus.PLANNING,
+      leadOrgId: orgUniversity.id,
+      trackMetadata: {
+        facultyMentor: "Dr. B. K. Singh (Dept. of Civil & Environmental Engineering)",
+        department: "Civil Engineering"
+      },
+      problems: {
+        create: [
+          { problemId: problem4.id, isPrimary: true }
+        ]
+      }
+    },
+  });
+
+  // Explicitly guarantee ProjectProblem links exist
+  await prisma.projectProblem.upsert({
+    where: {
+      projectId_problemId: {
+        projectId: projWater.id,
+        problemId: problem1.id,
+      },
+    },
+    update: { isPrimary: true },
+    create: {
+      projectId: projWater.id,
+      problemId: problem1.id,
+      isPrimary: true,
+    },
+  });
+
+  await prisma.projectProblem.upsert({
+    where: {
+      projectId_problemId: {
+        projectId: projDust.id,
+        problemId: problem2.id,
+      },
+    },
+    update: { isPrimary: true },
+    create: {
+      projectId: projDust.id,
+      problemId: problem2.id,
+      isPrimary: true,
+    },
+  });
+
+  await prisma.projectProblem.upsert({
+    where: {
+      projectId_problemId: {
+        projectId: projCanal.id,
+        problemId: problem4.id,
+      },
+    },
+    update: { isPrimary: true },
+    create: {
+      projectId: projCanal.id,
+      problemId: problem4.id,
+      isPrimary: true,
+    },
+  });
+
+  // =========================================================================
+  // 6. V3 RESOURCE NEEDS
+  // =========================================================================
+  console.log("  → Upserting Project Resource Needs...");
+
+  const needSpectrometry = await prisma.need.upsert({
+    where: { id: SEED_IDS.NEED_SPECTROMETRY },
+    update: {},
+    create: {
+      id: SEED_IDS.NEED_SPECTROMETRY,
+      creatorOrgId: orgUniversity.id,
+      projectId: projWater.id,
+      category: OfferCategory.TESTING_ANALYSIS,
+      title: "ICP-MS Spectrometry & Heavy Metal Water Testing",
+      details: "Accredited spectrometry analysis for 45 raw and treated borehole effluent samples benchmarked against BIS IS-10500 drinking water standards.",
+      district: "East Singhbhum",
+      urgency: NeedUrgency.CRITICAL_PATH,
+      status: NeedStatus.COMMITTED,
+    },
+  });
+
+  const needNozzles = await prisma.need.upsert({
+    where: { id: SEED_IDS.NEED_NOZZLES },
+    update: {},
+    create: {
+      id: SEED_IDS.NEED_NOZZLES,
+      creatorOrgId: orgStartup.id,
+      projectId: projDust.id,
+      category: OfferCategory.HARDWARE_COMPONENTS,
+      title: "High-Pressure Stainless Steel Atomizing Nozzles",
+      details: "Precision 0.3mm ceramic-orifice anti-drip atomizing nozzles rated for 70 bar fluidic pressure to ensure consistent 20-micron misting.",
+      district: "Dhanbad",
+      urgency: NeedUrgency.STANDARD,
+      status: NeedStatus.COMMITTED,
+    },
+  });
+
+  const needDrone = await prisma.need.upsert({
+    where: { id: SEED_IDS.NEED_DRONE },
+    update: {},
+    create: {
+      id: SEED_IDS.NEED_DRONE,
+      creatorOrgId: orgUniversity.id,
+      projectId: projCanal.id,
+      category: OfferCategory.FACILITY_SITE_ACCESS,
+      title: "Canal Alignment Drone GIS Topographic Survey",
+      details: "High-resolution digital surface model (DSM) survey over 7.5 km canal reach to calculate dredge sediment volume.",
+      district: "Hazaribagh",
+      urgency: NeedUrgency.STANDARD,
+      status: NeedStatus.OPEN,
+    },
+  });
+
+  // =========================================================================
+  // 7. V3 STRUCTURED COLLABORATIONS
+  // =========================================================================
+  console.log("  → Upserting Bilateral Collaborations...");
+
+  const collabWaterData = {
+    needId: needSpectrometry.id,
+    offerId: offerSpectrometry.id,
+    providerOrgId: orgIndustry.id,
+    recipientOrgId: orgUniversity.id,
+    projectId: projWater.id,
+    problemId: problem1.id,
+    industryId: orgIndustry.id,
+    supportType: SupportType.TECHNICAL,
+    contributionScope: "Tata Steel Advanced Water Technology lab at Jamshedpur provides full ICP-MS spectrometry validation for BIT Mesra filter effluent and technical mentoring on scaling column adsorption life.",
+    expectedCompletionDate: new Date("2026-06-30T00:00:00Z"),
+    status: CollaborationStatus.IN_PROGRESS,
+    message: "Tata Steel Advanced Water Technology lab at Jamshedpur provides full ICP-MS spectrometry validation.",
+  };
+
+  const collabWater = await prisma.collaboration.upsert({
+    where: { id: SEED_IDS.COLLAB_WATER },
+    update: collabWaterData,
+    create: {
+      id: SEED_IDS.COLLAB_WATER,
+      ...collabWaterData,
+    },
+  });
+
+  const collabDustData = {
+    needId: needNozzles.id,
+    offerId: offerPrototyping.id,
+    providerOrgId: orgIndustry.id,
+    recipientOrgId: orgStartup.id,
+    projectId: projDust.id,
+    problemId: problem2.id,
+    industryId: orgIndustry.id,
+    supportType: SupportType.PROTOTYPING,
+    contributionScope: "Tata Steel Engineering workshop provides spray pattern droplet testing and CNC machining of nozzle manifolds for JharJal's misting cannons.",
+    expectedCompletionDate: new Date("2026-05-15T00:00:00Z"),
+    status: CollaborationStatus.ACCEPTED,
+    message: "Tata Steel Engineering workshop provides spray pattern droplet testing and CNC machining.",
+  };
+
+  const collabDust = await prisma.collaboration.upsert({
+    where: { id: SEED_IDS.COLLAB_DUST },
+    update: collabDustData,
+    create: {
+      id: SEED_IDS.COLLAB_DUST,
+      ...collabDustData,
+    },
+  });
+
+  // =========================================================================
+  // 8. V3 PROJECT MILESTONES
+  // =========================================================================
+  console.log("  → Upserting Project Milestones...");
+
+  await prisma.milestone.upsert({
+    where: { id: "m1111111-1111-4111-aaaa-111111111111" },
+    update: {},
+    create: {
+      id: "m1111111-1111-4111-aaaa-111111111111",
+      projectId: projWater.id,
+      collaborationId: collabWater.id,
+      title: "Lab scale media testing and water sample benchmarking",
+      description: "Sample benchmarking from Potka borewells; benchtop adsorption column validation.",
+      responsibleParty: "BIT Mesra Chemical Engg Dept",
+      targetDate: new Date("2026-04-15T00:00:00Z"),
+      status: MilestoneStatus.VERIFIED,
+      deliverableUrl: "https://storage.civicbridge.jharkhand.gov.in/updates/bit_lab_report_milestone1.pdf",
+      verifiedByOrgId: orgIndustry.id,
+      verifiedAt: new Date("2026-04-16T12:00:00Z"),
+    },
+  });
+
+  await prisma.milestone.upsert({
+    where: { id: "m2222222-2222-4222-aaaa-222222222222" },
+    update: {},
+    create: {
+      id: "m2222222-2222-4222-aaaa-222222222222",
+      projectId: projWater.id,
+      collaborationId: collabWater.id,
+      title: "Column casing fabrication and community site preparation",
+      description: "Fabrication of 3 food-grade stainless steel adsorption columns and civil platform at Baredih community borewell.",
+      responsibleParty: "BIT Mesra Civil / Tata Steel CSR",
+      targetDate: new Date("2026-05-30T00:00:00Z"),
+      status: MilestoneStatus.VERIFIED,
+      verifiedByOrgId: orgIndustry.id,
+      verifiedAt: new Date("2026-05-31T15:00:00Z"),
+    },
+  });
+
+  await prisma.milestone.upsert({
+    where: { id: "m3333333-3333-4333-aaaa-333333333333" },
+    update: {},
+    create: {
+      id: "m3333333-3333-4333-aaaa-333333333333",
+      projectId: projWater.id,
+      collaborationId: collabWater.id,
+      title: "Pilot installation, telemetry validation, and community handover",
+      description: "Field installation of columns with solar-powered continuous fluoride sensor and community water committee orientation.",
+      responsibleParty: "Joint University-Industry Team",
+      targetDate: new Date("2026-07-15T00:00:00Z"),
+      status: MilestoneStatus.IN_PROGRESS,
+    },
+  });
+
+  // =========================================================================
+  // 9. V3 FIELD PILOTS & GOVERNMENT CLEARANCE (NOC)
+  // =========================================================================
+  console.log("  → Upserting Field Pilots...");
+
+  const pilotWaterData = {
+    projectId: projWater.id,
+    problemId: problem1.id,
+    responsibleOrgId: orgUniversity.id,
+    title: "Baredih Community Borewell Water Purification Pilot",
+    description: "Decentralized field testbed purifying 4,500 liters of drinking water per day for 1,500 villagers in Potka Block, East Singhbhum.",
+    risksRequirements: "Requires official clearance from District Administration and PHED. Safe disposal protocol for spent activated alumina backwash required.",
+    siteLocation: "Community Borewell No. 3, Baredih Village, Potka Block",
+    district: "East Singhbhum",
+    latitude: 22.6186,
+    longitude: 86.2238,
+    targetBeneficiaryCount: 1500,
+    actualBeneficiaryCount: 1420,
+    startDate: new Date("2026-05-01T00:00:00Z"),
+    endDate: new Date("2026-08-31T00:00:00Z"),
+    actualStartDate: new Date("2026-05-10T00:00:00Z"),
+    clearanceStatus: ClearanceStatus.GRANTED,
+    clearanceDocumentUrl: "https://storage.civicbridge.jharkhand.gov.in/clearance/dc_office_noc_potka_water_2026.pdf",
+    clearanceNotes: "Administrative NOC granted by Deputy Commissioner Office East Singhbhum under Swachh Bharat Mission (Grameen) convergence.",
+    clearanceRequestedAt: new Date("2026-04-18T10:00:00Z"),
+    clearanceDecidedAt: new Date("2026-04-25T14:30:00Z"),
+    clearedById: userAdmin.id,
+    status: PilotStatus.ACTIVE_ON_GROUND,
+  };
+
+  const pilotWater = await prisma.pilotDeployment.upsert({
+    where: { id: SEED_IDS.PILOT_WATER },
+    update: pilotWaterData,
+    create: {
+      id: SEED_IDS.PILOT_WATER,
+      ...pilotWaterData,
+    },
+  });
+
+  const pilotDust = await prisma.pilotDeployment.upsert({
+    where: { id: SEED_IDS.PILOT_DUST },
+    update: {},
+    create: {
+      id: SEED_IDS.PILOT_DUST,
+      projectId: projDust.id,
+      problemId: problem2.id,
+      responsibleOrgId: orgStartup.id,
+      title: "Bastacola Haul Junction Dust Suppression Pilot",
+      description: "Field demonstration of 2 high-pressure autonomous misting cannons covering 400 meters of industrial haul corridor.",
+      risksRequirements: "Traffic police coordination required during installation. Surface drainage must be inspected to prevent sludge buildup.",
+      siteLocation: "Bastacola Crossing, Jharia-Sindri Haul Road",
+      district: "Dhanbad",
+      latitude: 23.7523,
+      longitude: 86.4258,
+      targetBeneficiaryCount: 2400,
+      startDate: new Date("2026-06-01T00:00:00Z"),
+      endDate: new Date("2026-09-30T00:00:00Z"),
+      clearanceStatus: ClearanceStatus.REQUESTED,
+      clearanceNotes: "NOC requested from Dhanbad District Administration and JSPCB Regional Office.",
+      clearanceRequestedAt: new Date("2026-04-28T11:00:00Z"),
+      status: PilotStatus.PREPARATION,
+    },
+  });
+
+  // =========================================================================
+  // 10. V3 QUANTITATIVE METRICS (Baseline vs Outcome)
+  // =========================================================================
+  console.log("  → Upserting Empirical Pilot Metrics...");
+
+  await prisma.pilotMetric.upsert({
+    where: { id: "met11111-1111-4111-aaaa-111111111111" },
+    update: {},
+    create: {
+      id: "met11111-1111-4111-aaaa-111111111111",
+      pilotId: pilotWater.id,
+      metricName: "Fluoride Concentration",
+      unit: "mg/L",
+      baselineValue: 3.5,
+      targetValue: 1.0,
+      outcomeValue: 0.82,
+      status: "VERIFIED",
+      recordedById: userUniversity.id,
+      verifiedById: userIndustry.id,
+      verifiedAt: new Date("2026-05-20T11:00:00Z"),
+    },
+  });
+
+  await prisma.pilotMetric.upsert({
+    where: { id: "met22222-2222-4222-aaaa-222222222222" },
+    update: {},
+    create: {
+      id: "met22222-2222-4222-aaaa-222222222222",
+      pilotId: pilotWater.id,
+      metricName: "Heavy Metal Toxicity Index",
+      unit: "mg/L",
+      baselineValue: 2.4,
+      targetValue: 0.05,
+      outcomeValue: 0.038,
+      status: "VERIFIED",
+      recordedById: userUniversity.id,
+      verifiedById: userIndustry.id,
+      verifiedAt: new Date("2026-05-20T11:30:00Z"),
+    },
+  });
+
+  await prisma.pilotMetric.upsert({
+    where: { id: "met33333-3333-4333-aaaa-333333333333" },
+    update: {},
+    create: {
+      id: "met33333-3333-4333-aaaa-333333333333",
+      pilotId: pilotWater.id,
+      metricName: "Daily Clean Potable Water Output",
+      unit: "Liters / Day",
+      baselineValue: 0,
+      targetValue: 4000,
+      outcomeValue: 4350,
+      status: "REPORTED",
+      recordedById: userUniversity.id,
+    },
+  });
+
+  // =========================================================================
+  // 11. V3 MULTI-STAKEHOLDER GROUND-TRUTH VERIFICATIONS
+  // =========================================================================
+  console.log("  → Upserting Multi-Stakeholder Verifications...");
+
+  await prisma.pilotVerification.upsert({
+    where: { id: "ver11111-1111-4111-aaaa-111111111111" },
+    update: {},
+    create: {
+      id: "ver11111-1111-4111-aaaa-111111111111",
+      pilotId: pilotWater.id,
+      verifierId: userUniversity.id,
+      verificationRole: Role.UNIVERSITY,
+      organizationId: orgUniversity.id,
+      finding: VerificationFinding.SUCCESS_CONFIRMED,
+      evidenceType: EvidenceType.LAB_REPORT,
+      feedbackText: "Continuous colorimetric telemetry and university lab testing confirm fluoride reduced from 3.5 mg/L to 0.82 mg/L, comfortably below the Indian National Standard (BIS IS-10500 limit: 1.0 mg/L).",
+    },
+  });
+
+  await prisma.pilotVerification.upsert({
+    where: { id: "ver22222-2222-4222-aaaa-222222222222" },
+    update: {},
+    create: {
+      id: "ver22222-2222-4222-aaaa-222222222222",
+      pilotId: pilotWater.id,
+      verifierId: userIndustry.id,
+      verificationRole: Role.INDUSTRY,
+      organizationId: orgIndustry.id,
+      finding: VerificationFinding.SUCCESS_CONFIRMED,
+      evidenceType: EvidenceType.LAB_REPORT,
+      feedbackText: "Independent spectrometry assays conducted at Tata Steel Advanced Water Technology lab at Jamshedpur verify heavy metals reduced to 0.038 mg/L (98.4% removal efficiency). Adsorption bed capacity integrity confirmed.",
+    },
+  });
+
+  await prisma.pilotVerification.upsert({
+    where: { id: "ver33333-3333-4333-aaaa-333333333333" },
+    update: {},
+    create: {
+      id: "ver33333-3333-4333-aaaa-333333333333",
+      pilotId: pilotWater.id,
+      verifierId: userAdmin.id,
+      verificationRole: Role.ADMIN,
+      finding: VerificationFinding.SUCCESS_CONFIRMED,
+      evidenceType: EvidenceType.WRITTEN_INSPECTION,
+      feedbackText: "On-ground physical inspection conducted by Potka BDO and PHED Junior Engineer. Three filtration columns operational; automated shut-off valve functioning during high turbidity.",
+    },
+  });
+
+  await prisma.pilotVerification.upsert({
+    where: { id: "ver44444-4444-4444-aaaa-444444444444" },
+    update: {},
+    create: {
+      id: "ver44444-4444-4444-aaaa-444444444444",
+      pilotId: pilotWater.id,
+      verifierId: userCitizen.id,
+      verificationRole: Role.CITIZEN,
+      finding: VerificationFinding.SUCCESS_CONFIRMED,
+      evidenceType: EvidenceType.PHOTO_GEOTAG,
+      feedbackText: "The drinking water has completely changed. There is no yellowish color or foul chemical taste anymore. Our village children and elders can safely drink from the main borewell again.",
+    },
+  });
+
+  // =========================================================================
+  // 12. PRESERVED LEGACY V2 RECORDS
+  // =========================================================================
+  console.log("  → Preserving legacy V2 proposal, concept, and support requests...");
+
+  await prisma.proposal.upsert({
     where: { id: SEED_IDS.PROPOSAL_1 },
     update: {},
     create: {
@@ -579,32 +1040,12 @@ async function main() {
         { title: "Column casing fabrication and community site preparation", deadline: "2026-05-30", status: "IN_PROGRESS" },
         { title: "Pilot installation, telemetry validation, and community handover", deadline: "2026-07-15", status: "PENDING" },
       ],
-      budgetRequired: 145000, // INR 1.45 Lakhs for raw materials & IoT sensors (no CSR funding requested)
+      budgetRequired: 145000,
       status: ProposalStatus.IN_PROGRESS,
     },
   });
 
-  // Progress Update for Proposal (enforcing XOR: proposalId is populated, businessConceptId is NULL)
-  await prisma.progressUpdate.upsert({
-    where: { id: SEED_IDS.UPDATE_PROPOSAL },
-    update: {},
-    create: {
-      id: SEED_IDS.UPDATE_PROPOSAL,
-      proposalId: proposal1.id,
-      businessConceptId: null,
-      updateText: "Milestone 1 achieved: Benchmarked water samples from Nawagarh and Baredih. Activated alumina achieved 94.2% fluoride removal efficiency in benchtop trials.",
-      milestoneTitle: "Lab scale media testing and water sample benchmarking",
-      attachmentUrl: "https://storage.civicbridge.jharkhand.gov.in/updates/bit_lab_report_milestone1.pdf",
-      postedById: userUniversity.id,
-    },
-  });
-
-  // =========================================================================
-  // 5. STARTUP BUSINESS CONCEPT (Attached to Problem 2 - Coal Dust Air Pollution)
-  // =========================================================================
-  console.log("  → Upserting Startup Business Concept...");
-
-  const concept1 = await prisma.businessConcept.upsert({
+  await prisma.businessConcept.upsert({
     where: { id: SEED_IDS.CONCEPT_1 },
     update: {},
     create: {
@@ -612,7 +1053,7 @@ async function main() {
       problemId: problem2.id,
       startupId: orgStartup.id,
       solutionDescription: "Low-cost bio-surfactant misting cannons and solar-powered air filtration canopies installed along high-frequency coal transport corridors to suppress particulate dispersion at the point of transit.",
-      targetBeneficiaries: "Over 800 households, roadside vendors, and school children residing within 150m of the Jharia-Sindri coal transport corridor.",
+      targetBeneficiaries: "Over 2,400 households, roadside vendors, and school children residing within 150m of the Jharia-Sindri coal transport corridor.",
       marketSize: "Estimated 140km of industrial haul corridors across Dhanbad, Bokaro, and Ramgarh coal belts in Jharkhand.",
       businessModel: "B2B / B2G hardware sales and annual misting consumable service contracts with mining logistics operators and local municipal boards.",
       revenueModel: "Per-kilometer haul road dust suppression service fees and IoT compliance monitoring subscriptions.",
@@ -621,58 +1062,22 @@ async function main() {
     },
   });
 
-  // Progress Update for Business Concept (enforcing XOR: businessConceptId is populated, proposalId is NULL)
-  await prisma.progressUpdate.upsert({
-    where: { id: SEED_IDS.UPDATE_CONCEPT },
-    update: {},
-    create: {
-      id: SEED_IDS.UPDATE_CONCEPT,
-      businessConceptId: concept1.id,
-      proposalId: null,
-      updateText: "Completed baseline field survey and nozzle pressure test with localized water mist atomizer at Bastacola crossing.",
-      milestoneTitle: "Baseline Nozzle Pressure Test",
-      postedById: userStartup.id,
-    },
-  });
-
-  // =========================================================================
-  // 6. INDUSTRY COLLABORATION (Tata Steel collaborating on Problem 1 - Water)
-  // =========================================================================
-  console.log("  → Upserting Industry Collaboration...");
-
-  await prisma.collaboration.upsert({
-    where: { id: SEED_IDS.COLLAB_1 },
-    update: {},
-    create: {
-      id: SEED_IDS.COLLAB_1,
-      problemId: problem1.id,
-      industryId: orgIndustry.id,
-      supportType: SupportType.TECHNICAL, // Strictly TECHNICAL / MENTORSHIP / PROTOTYPING / GENERAL_INTEREST
-      message: "Tata Steel's Advanced Water Technology lab at Jamshedpur offers full spectrometry validation for the BIT Mesra team's filter effluent and technical mentoring on scaling column adsorption life.",
-      status: CollaborationStatus.ACTIVE,
-    },
-  });
-
-  // =========================================================================
-  // 7. STARTUP SUPPORT REQUEST (Attached to Problem 2 / Concept 1 - Dust Suppression)
-  // =========================================================================
-  console.log("  → Upserting Startup Support Request...");
-
   await prisma.supportRequest.upsert({
     where: { id: SEED_IDS.SUPPORT_REQ_1 },
     update: {},
     create: {
       id: SEED_IDS.SUPPORT_REQ_1,
-      businessConceptId: concept1.id,
+      businessConceptId: SEED_IDS.CONCEPT_1,
       problemId: problem2.id,
       requestedFrom: Role.INDUSTRY,
       requestType: "Pilot Testing & Spectrometry Validation",
       details: "Requesting access to Tata Steel CSR & Environmental Lab for particle size analysis and industrial misting nozzle endurance benchmarking.",
-      status: "PENDING",
+      status: "APPROVED",
+      responseNotes: "Tata Steel Engineering Division approved flow bench testing access at Jamshedpur.",
     },
   });
 
-  console.log("✅ CivicBridge development seed completed successfully!");
+  console.log("✅ CivicBridge Connected V3 Seed Ecosystem successfully planted!");
 }
 
 main()

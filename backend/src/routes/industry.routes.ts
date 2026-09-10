@@ -1,15 +1,18 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { Role, FilterStatus, SupportType, CollaborationStatus, VentureStage } from "@prisma/client";
+import {
+  Role,
+  FilterStatus,
+  SupportType,
+  CollaborationStatus,
+  VentureStage,
+  CapabilityType,
+} from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { authorizeRoles } from "../middleware/role.middleware.js";
 
 const router = Router();
-
-// Require authentication and strictly INDUSTRY role for all industry endpoints
-router.use(authenticate);
-router.use(authorizeRoles(Role.INDUSTRY));
 
 // Validation Schemas
 const createIndustryCollabSchema = z.object({
@@ -27,6 +30,57 @@ const respondSupportRequestSchema = z.object({
     errorMap: () => ({ message: "Status must be either APPROVED or REJECTED" }),
   }),
   responseNotes: z.string().trim().max(1000).optional(),
+});
+
+const updateIndustryProfileSchema = z.object({
+  companyType: z.string().trim().optional().nullable(),
+  industryCategories: z.array(z.string()).optional(),
+  domainTags: z.array(z.string()).optional(),
+  expertiseTags: z.array(z.string()).optional(),
+  certifications: z.array(z.string()).optional(),
+  deploymentCapacity: z.string().trim().optional().nullable(),
+  locationsServed: z.array(z.string()).optional(),
+  caseStudies: z.string().trim().optional().nullable(),
+  contactEmail: z.string().email().optional(),
+  contactPhone: z.string().trim().optional().nullable(),
+  district: z.string().trim().optional().nullable(),
+});
+
+const createCapabilitySchema = z.object({
+  type: z.nativeEnum(CapabilityType, {
+    errorMap: () => ({ message: "Type must be PRODUCT, SERVICE, EQUIPMENT_FACILITY, or TECHNICAL_EXPERTISE" }),
+  }),
+  title: z.string().trim().min(3, "Title must be at least 3 characters").max(200),
+  description: z.string().trim().min(10, "Description must be at least 10 characters"),
+  category: z.string().trim().min(2, "Category is required"),
+  specifications: z.any().optional(),
+  availability: z.string().trim().optional().default("AVAILABLE"),
+  locationsServed: z.array(z.string()).optional().default([]),
+  caseStudies: z.string().trim().optional().nullable(),
+});
+
+const updateCapabilitySchema = z.object({
+  type: z.nativeEnum(CapabilityType).optional(),
+  title: z.string().trim().min(3).max(200).optional(),
+  description: z.string().trim().min(10).optional(),
+  category: z.string().trim().min(2).optional(),
+  specifications: z.any().optional(),
+  availability: z.string().trim().optional(),
+  locationsServed: z.array(z.string()).optional(),
+  caseStudies: z.string().trim().optional().nullable(),
+});
+
+const createIndustryProposalSchema = z.object({
+  problemId: z.string().min(1, "Problem ID is required"),
+  capabilityId: z.string().optional().nullable(),
+  providedItems: z.string().trim().min(5, "Provided items description is required"),
+  technicalCapability: z.string().trim().min(5, "Technical capability is required"),
+  relevantProductService: z.string().trim().optional().nullable(),
+  previousDeployment: z.string().trim().optional().nullable(),
+  deploymentRequirements: z.string().trim().optional().nullable(),
+  expectedTimeline: z.string().trim().min(2, "Expected timeline is required"),
+  estimatedCost: z.string().trim().optional().nullable(),
+  expectedCivicImpact: z.string().trim().min(5, "Expected civic impact is required"),
 });
 
 /**
@@ -65,7 +119,7 @@ function evaluateIndustryMatch(
     }`.toLowerCase();
   const contentText = `${problem.title} ${problem.description}`.toLowerCase();
 
-  // 1. Industry Domain matching (e.g. "Clean Tech", "Rural Infrastructure", "Industrial Waste")
+  // 1. Industry Domain matching
   for (const tag of org.domainTags) {
     const cleanTag = tag.trim().toLowerCase();
     const tagWords = cleanTag.split(/\s+/).filter((w) => w.length > 3);
@@ -77,7 +131,7 @@ function evaluateIndustryMatch(
     }
   }
 
-  // 2. Technical Capabilities & Facility matching (e.g. "Prototyping Labs", "Pilot Testing Facilities", "Mentorship")
+  // 2. Technical Capabilities & Facility matching
   for (const tag of org.expertiseTags) {
     const cleanTag = tag.trim().toLowerCase();
     const tagWords = cleanTag.split(/\s+/).filter((w) => w.length > 3);
@@ -123,7 +177,6 @@ function evaluateIndustryMatch(
     matchReasons.push(`Statewide CSR & technology deployment candidate in ${problem.category}`);
   }
 
-  // Cap at 100
   matchScore = Math.min(100, matchScore);
 
   return {
@@ -132,11 +185,143 @@ function evaluateIndustryMatch(
   };
 }
 
+// All industry endpoints require authentication
+router.use(authenticate);
+
+// =============================================================================
+// CROSS-STAKEHOLDER MARKETPLACE DISCOVERY (Read-only for all authenticated roles)
+// =============================================================================
+
+/**
+ * GET /api/industry/capabilities/marketplace
+ * Public capability catalog across all industrial & solution partners.
+ * Accessible to any authenticated role (Universities, Startups, Government, Industry).
+ */
+router.get("/capabilities/marketplace", async (req: Request, res: Response) => {
+  try {
+    const { type, category, district, search } = req.query;
+
+    const whereClause: any = {};
+
+    if (type && Object.values(CapabilityType).includes(type as CapabilityType)) {
+      whereClause.type = type as CapabilityType;
+    }
+
+    if (category && typeof category === "string" && category !== "ALL") {
+      whereClause.category = { contains: category, mode: "insensitive" };
+    }
+
+    if (district && typeof district === "string" && district !== "ALL") {
+      whereClause.locationsServed = { has: district };
+    }
+
+    if (search && typeof search === "string") {
+      whereClause.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { category: { contains: search, mode: "insensitive" } },
+        { organization: { name: { contains: search, mode: "insensitive" } } },
+      ];
+    }
+
+    const capabilities = await prisma.industryCapability.findMany({
+      where: whereClause,
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            companyType: true,
+            district: true,
+            state: true,
+            certifications: true,
+            contactEmail: true,
+            contactPhone: true,
+            deploymentCapacity: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json({
+      success: true,
+      count: capabilities.length,
+      capabilities,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch industry capability marketplace.",
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/industry/capabilities/:id
+ * Retrieve detail of a single capability.
+ */
+router.get("/capabilities/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const capability = await prisma.industryCapability.findUnique({
+      where: { id },
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            companyType: true,
+            industryCategories: true,
+            district: true,
+            state: true,
+            certifications: true,
+            contactEmail: true,
+            contactPhone: true,
+            deploymentCapacity: true,
+            locationsServed: true,
+            caseStudies: true,
+          },
+        },
+      },
+    });
+
+    if (!capability) {
+      res.status(404).json({
+        success: false,
+        error: `Capability with ID ${id} not found.`,
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      capability,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch capability details.",
+      details: error.message,
+    });
+  }
+});
+
+// =============================================================================
+// STRICT INDUSTRY ROLE RESTRICTION FOR PARTNER MANAGEMENT ENDPOINTS
+// =============================================================================
+router.use(authorizeRoles(Role.INDUSTRY));
+
 // =============================================================================
 // 1. GET /api/industry/dashboard
 // =============================================================================
 /**
- * Real-time dashboard statistics and feeds for the authenticated industry user.
+ * Real-time dashboard statistics, capability catalog, and active deployments
+ * tailored for Industry & Solution Partners.
  */
 router.get("/dashboard", async (req: Request, res: Response) => {
   try {
@@ -162,7 +347,46 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       return;
     }
 
-    // 2. Fetch collaborations owned by this industry
+    // 2. Fetch all published capabilities of this partner
+    const capabilities = await prisma.industryCapability.findMany({
+      where: { organizationId: orgId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const productsCount = capabilities.filter((c) => c.type === CapabilityType.PRODUCT).length;
+    const servicesCount = capabilities.filter((c) => c.type === CapabilityType.SERVICE).length;
+    const equipmentCount = capabilities.filter((c) => c.type === CapabilityType.EQUIPMENT_FACILITY).length;
+    const expertiseCount = capabilities.filter((c) => c.type === CapabilityType.TECHNICAL_EXPERTISE).length;
+
+    // 3. Fetch capability & deployment proposals submitted by this partner
+    const deploymentProposals = await prisma.industryDeploymentProposal.findMany({
+      where: { organizationId: orgId },
+      include: {
+        problem: {
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            district: true,
+            priorityScore: true,
+            priorityTier: true,
+            status: true,
+            verificationStatus: true,
+          },
+        },
+        capability: {
+          select: {
+            id: true,
+            type: true,
+            title: true,
+            category: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // 4. Fetch collaborations owned by this industry
     const myCollaborations = await prisma.collaboration.findMany({
       where: { industryId: orgId },
       include: {
@@ -193,7 +417,7 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       orderBy: { createdAt: "desc" },
     });
 
-    // 3. Fetch support requests directed to INDUSTRY
+    // 5. Fetch support requests directed to INDUSTRY
     const supportRequests = await prisma.supportRequest.findMany({
       where: { requestedFrom: Role.INDUSTRY },
       include: {
@@ -227,22 +451,56 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       orderBy: { createdAt: "desc" },
     });
 
-    // Compute metric tallies
-    const totalCollaborations = myCollaborations.length;
-    const activeCollaborations = myCollaborations.filter(
-      (c) => c.status === CollaborationStatus.ACTIVE
-    ).length;
-    const interestedCollaborations = myCollaborations.filter(
-      (c) => c.status === CollaborationStatus.INTERESTED
-    ).length;
-    const completedCollaborations = myCollaborations.filter(
-      (c) => c.status === CollaborationStatus.COMPLETED
-    ).length;
+    // 6. Fetch active field pilot deployments involving this partner
+    const activeDeployments = await prisma.pilotDeployment.findMany({
+      where: {
+        OR: [
+          { responsibleOrgId: orgId },
+          {
+            project: {
+              collaborations: {
+                some: {
+                  OR: [
+                    { industryId: orgId },
+                    { providerOrgId: orgId },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        problem: {
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            district: true,
+          },
+        },
+        project: {
+          select: {
+            id: true,
+            title: true,
+            trackType: true,
+            leadOrg: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        metrics: {
+          take: 3,
+          orderBy: { recordedAt: "desc" },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
 
-    const pendingSupportRequests = supportRequests.filter((r) => r.status === "PENDING").length;
-    const approvedSupportRequests = supportRequests.filter((r) => r.status === "APPROVED").length;
-
-    // 4. Fetch candidates for recommended opportunities
+    // 7. Scored Civic Opportunities
     const candidateProblems = await prisma.problem.findMany({
       where: {
         filterStatus: FilterStatus.PASSED,
@@ -259,6 +517,10 @@ router.get("/dashboard", async (req: Request, res: Response) => {
             industryId: true,
           },
         },
+        industryProposals: {
+          where: { organizationId: orgId },
+          select: { id: true, status: true },
+        },
         _count: {
           select: {
             proposals: true,
@@ -271,10 +533,10 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       take: 20,
     });
 
-    // Score recommendations
     const scoredOpportunities = candidateProblems
       .map((problem) => {
         const hasCollaborated = problem.collaborations.some((c) => c.industryId === orgId);
+        const hasProposed = problem.industryProposals.length > 0;
         const { matchScore, matchReasons } = evaluateIndustryMatch(org, problem);
 
         return {
@@ -293,6 +555,7 @@ router.get("/dashboard", async (req: Request, res: Response) => {
           businessConceptsCount: problem._count.businessConcepts,
           collaborationsCount: problem._count.collaborations,
           hasCollaborated,
+          hasProposed,
           matchScore,
           matchReasons,
         };
@@ -300,11 +563,25 @@ router.get("/dashboard", async (req: Request, res: Response) => {
       .sort((a, b) => b.matchScore - a.matchScore)
       .slice(0, 6);
 
-    // 5. Recent activity log (from collaborations and responses)
-    const recentActivity = myCollaborations
-      .filter((c) => c.problem)
-      .slice(0, 10)
-      .map((c) => ({
+    // Compute metric tallies
+    const totalCollaborations = myCollaborations.length;
+    const activeCollaborations = myCollaborations.filter(
+      (c) => c.status === CollaborationStatus.ACTIVE || c.status === CollaborationStatus.ACCEPTED
+    ).length;
+    const pendingSupportRequests = supportRequests.filter((r) => r.status === "PENDING").length;
+    const approvedSupportRequests = supportRequests.filter((r) => r.status === "APPROVED").length;
+
+    // Recent activity
+    const recentActivity = [
+      ...deploymentProposals.map((dp) => ({
+        id: dp.id,
+        type: "DEPLOYMENT_PROPOSAL",
+        title: `Deployment Proposed: "${dp.providedItems.slice(0, 50)}..."`,
+        status: dp.status,
+        timestamp: dp.createdAt,
+        problemId: dp.problem.id,
+      })),
+      ...myCollaborations.filter((c) => c.problem).map((c) => ({
         id: c.id,
         type: "COLLABORATION_REGISTERED",
         title: `Collaboration Offered on "${c.problem!.title}"`,
@@ -312,7 +589,10 @@ router.get("/dashboard", async (req: Request, res: Response) => {
         status: c.status,
         timestamp: c.createdAt,
         problemId: c.problem!.id,
-      }));
+      })),
+    ]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 10);
 
     res.json({
       success: true,
@@ -321,22 +601,37 @@ router.get("/dashboard", async (req: Request, res: Response) => {
           id: org.id,
           name: org.name,
           type: org.type,
+          companyType: org.companyType || "Enterprise Solution Partner",
           regCode: org.regCode,
+          industryCategories: org.industryCategories || [],
+          certifications: org.certifications || [],
+          deploymentCapacity: org.deploymentCapacity || "",
+          locationsServed: org.locationsServed || [],
+          caseStudies: org.caseStudies || "",
           domainTags: org.domainTags,
           expertiseTags: org.expertiseTags,
           district: org.district,
           state: org.state,
           contactEmail: org.contactEmail,
+          contactPhone: org.contactPhone,
         },
         metrics: {
+          productsCount,
+          servicesCount,
+          equipmentCount,
+          expertiseCount,
+          totalCapabilities: capabilities.length,
           totalCollaborations,
           activeCollaborations,
-          interestedCollaborations,
-          completedCollaborations,
+          activeDeploymentsCount: activeDeployments.length,
+          submittedProposalsCount: deploymentProposals.length,
           pendingSupportRequests,
           approvedSupportRequests,
           recommendedOpportunitiesCount: scoredOpportunities.length,
         },
+        capabilities,
+        deploymentProposals,
+        activeDeployments,
         myCollaborations: myCollaborations
           .filter((c) => c.problem)
           .map((c) => ({
@@ -382,11 +677,566 @@ router.get("/dashboard", async (req: Request, res: Response) => {
 });
 
 // =============================================================================
-// 2. GET /api/industry/recommended-problems
+// 2. PUT /api/industry/profile
 // =============================================================================
 /**
- * Explainable recommendation discovery for Industry partners.
- * Evaluates AI-screened problems against enterprise domain, expertise tags, and location.
+ * Update Industry profile details: company type, categories, certifications,
+ * deployment capacity, locations served, and case studies.
+ */
+router.put("/profile", async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.organizationId;
+    if (!orgId) {
+      res.status(400).json({
+        success: false,
+        error: "Authenticated user is not linked to an industry organization.",
+      });
+      return;
+    }
+
+    const parseResult = updateIndustryProfileSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation error",
+        details: parseResult.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const data = parseResult.data;
+
+    const updatedOrg = await prisma.organization.update({
+      where: { id: orgId },
+      data: {
+        ...(data.companyType !== undefined && { companyType: data.companyType }),
+        ...(data.industryCategories !== undefined && { industryCategories: data.industryCategories }),
+        ...(data.domainTags !== undefined && { domainTags: data.domainTags }),
+        ...(data.expertiseTags !== undefined && { expertiseTags: data.expertiseTags }),
+        ...(data.certifications !== undefined && { certifications: data.certifications }),
+        ...(data.deploymentCapacity !== undefined && { deploymentCapacity: data.deploymentCapacity }),
+        ...(data.locationsServed !== undefined && { locationsServed: data.locationsServed }),
+        ...(data.caseStudies !== undefined && { caseStudies: data.caseStudies }),
+        ...(data.contactEmail !== undefined && { contactEmail: data.contactEmail }),
+        ...(data.contactPhone !== undefined && { contactPhone: data.contactPhone }),
+        ...(data.district !== undefined && { district: data.district }),
+      },
+    });
+
+    res.json({
+      success: true,
+      message: "Industry profile updated successfully.",
+      organization: updatedOrg,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to update industry profile.",
+      details: error.message,
+    });
+  }
+});
+
+// =============================================================================
+// 3. CAPABILITY MANAGEMENT (CRUD for this organization)
+// =============================================================================
+
+/**
+ * GET /api/industry/capabilities
+ * List all capabilities belonging to the authenticated industry partner.
+ */
+router.get("/capabilities", async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.organizationId;
+    if (!orgId) {
+      res.status(400).json({
+        success: false,
+        error: "Authenticated user is not linked to an industry organization.",
+      });
+      return;
+    }
+
+    const { type } = req.query;
+    const whereClause: any = { organizationId: orgId };
+
+    if (type && Object.values(CapabilityType).includes(type as CapabilityType)) {
+      whereClause.type = type as CapabilityType;
+    }
+
+    const capabilities = await prisma.industryCapability.findMany({
+      where: whereClause,
+      include: {
+        _count: {
+          select: { proposals: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json({
+      success: true,
+      count: capabilities.length,
+      capabilities,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch industry capabilities.",
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/industry/capabilities
+ * Publish a new capability (Product, Service, Equipment/Facility, or Expertise).
+ */
+router.post("/capabilities", async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.organizationId;
+    if (!orgId) {
+      res.status(400).json({
+        success: false,
+        error: "Authenticated user must belong to an industry organization.",
+      });
+      return;
+    }
+
+    const parseResult = createCapabilitySchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation error",
+        details: parseResult.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const { type, title, description, category, specifications, availability, locationsServed, caseStudies } =
+      parseResult.data;
+
+    const capability = await prisma.industryCapability.create({
+      data: {
+        organizationId: orgId,
+        type,
+        title,
+        description,
+        category,
+        specifications: specifications || null,
+        availability: availability || "AVAILABLE",
+        locationsServed: locationsServed || [],
+        caseStudies: caseStudies || null,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `${type} published successfully to capability catalog.`,
+      capability,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to publish capability.",
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * PUT /api/industry/capabilities/:id
+ * Update an existing capability owned by this industry partner.
+ */
+router.put("/capabilities/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const orgId = req.user?.organizationId;
+    if (!orgId) {
+      res.status(400).json({
+        success: false,
+        error: "Authenticated user must belong to an industry organization.",
+      });
+      return;
+    }
+
+    const existing = await prisma.industryCapability.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      res.status(404).json({
+        success: false,
+        error: `Capability with ID ${id} not found.`,
+      });
+      return;
+    }
+
+    if (existing.organizationId !== orgId) {
+      res.status(403).json({
+        success: false,
+        error: "You can only edit capabilities published by your organization.",
+      });
+      return;
+    }
+
+    const parseResult = updateCapabilitySchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation error",
+        details: parseResult.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const data = parseResult.data;
+
+    const updated = await prisma.industryCapability.update({
+      where: { id },
+      data: {
+        ...(data.type !== undefined && { type: data.type }),
+        ...(data.title !== undefined && { title: data.title }),
+        ...(data.description !== undefined && { description: data.description }),
+        ...(data.category !== undefined && { category: data.category }),
+        ...(data.specifications !== undefined && { specifications: data.specifications }),
+        ...(data.availability !== undefined && { availability: data.availability }),
+        ...(data.locationsServed !== undefined && { locationsServed: data.locationsServed }),
+        ...(data.caseStudies !== undefined && { caseStudies: data.caseStudies }),
+      },
+    });
+
+    res.json({
+      success: true,
+      message: "Capability updated successfully.",
+      capability: updated,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to update capability.",
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/industry/capabilities/:id
+ * Delete a capability owned by this industry partner.
+ */
+router.delete("/capabilities/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const orgId = req.user?.organizationId;
+    if (!orgId) {
+      res.status(400).json({
+        success: false,
+        error: "Authenticated user must belong to an industry organization.",
+      });
+      return;
+    }
+
+    const existing = await prisma.industryCapability.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      res.status(404).json({
+        success: false,
+        error: `Capability with ID ${id} not found.`,
+      });
+      return;
+    }
+
+    if (existing.organizationId !== orgId) {
+      res.status(403).json({
+        success: false,
+        error: "You can only delete capabilities published by your organization.",
+      });
+      return;
+    }
+
+    await prisma.industryCapability.delete({
+      where: { id },
+    });
+
+    res.json({
+      success: true,
+      message: "Capability removed from catalog successfully.",
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to delete capability.",
+      details: error.message,
+    });
+  }
+});
+
+// =============================================================================
+// 4. CAPABILITY / DEPLOYMENT PROPOSALS & CIVIC CONTRIBUTION
+// =============================================================================
+
+/**
+ * GET /api/industry/problems/:id/contribution-options
+ * Pre-fill options and capabilities for proposing a contribution to a problem.
+ */
+router.get("/problems/:id/contribution-options", async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const orgId = req.user?.organizationId;
+    if (!orgId) {
+      res.status(400).json({
+        success: false,
+        error: "Authenticated user must belong to an industry organization.",
+      });
+      return;
+    }
+
+    const problem = await prisma.problem.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        category: true,
+        district: true,
+        priorityScore: true,
+        priorityTier: true,
+        verificationStatus: true,
+        affectedCount: true,
+      },
+    });
+
+    if (!problem) {
+      res.status(404).json({
+        success: false,
+        error: `Problem with ID ${id} not found.`,
+      });
+      return;
+    }
+
+    const myCapabilities = await prisma.industryCapability.findMany({
+      where: { organizationId: orgId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const existingProposals = await prisma.industryDeploymentProposal.findMany({
+      where: { problemId: id, organizationId: orgId },
+      include: { capability: true },
+    });
+
+    const existingCollaboration = await prisma.collaboration.findFirst({
+      where: { problemId: id, industryId: orgId },
+    });
+
+    res.json({
+      success: true,
+      problem,
+      myCapabilities,
+      existingProposals,
+      existingCollaboration,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to load contribution options for problem.",
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/industry/proposals
+ * Submit a focused Capability & Deployment Proposal for a civic problem.
+ * Also synchronizes with a Collaboration record to preserve Golden Demo & project pipelines.
+ */
+router.post("/proposals", async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.organizationId;
+    if (!orgId) {
+      res.status(400).json({
+        success: false,
+        error: "Authenticated user must belong to an industry organization.",
+      });
+      return;
+    }
+
+    const parseResult = createIndustryProposalSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation error",
+        details: parseResult.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const {
+      problemId,
+      capabilityId,
+      providedItems,
+      technicalCapability,
+      relevantProductService,
+      previousDeployment,
+      deploymentRequirements,
+      expectedTimeline,
+      estimatedCost,
+      expectedCivicImpact,
+    } = parseResult.data;
+
+    const problem = await prisma.problem.findUnique({
+      where: { id: problemId },
+    });
+
+    if (!problem) {
+      res.status(404).json({
+        success: false,
+        error: `Problem with ID ${problemId} not found.`,
+      });
+      return;
+    }
+
+    if (problem.filterStatus !== FilterStatus.PASSED) {
+      res.status(400).json({
+        success: false,
+        error: `Cannot propose deployment for a problem with filterStatus ${problem.filterStatus}.`,
+      });
+      return;
+    }
+
+    // Verify capabilityId belongs to this org if specified
+    if (capabilityId) {
+      const cap = await prisma.industryCapability.findUnique({
+        where: { id: capabilityId },
+      });
+      if (!cap || cap.organizationId !== orgId) {
+        res.status(400).json({
+          success: false,
+          error: "Specified capability does not belong to your organization.",
+        });
+        return;
+      }
+    }
+
+    // Create the Industry Deployment Proposal
+    const proposal = await prisma.industryDeploymentProposal.create({
+      data: {
+        problemId,
+        organizationId: orgId,
+        capabilityId: capabilityId || null,
+        providedItems,
+        technicalCapability,
+        relevantProductService: relevantProductService || null,
+        previousDeployment: previousDeployment || null,
+        deploymentRequirements: deploymentRequirements || null,
+        expectedTimeline,
+        estimatedCost: estimatedCost || null,
+        expectedCivicImpact,
+        status: "SUBMITTED",
+      },
+      include: {
+        problem: {
+          select: { id: true, title: true, district: true, category: true },
+        },
+        capability: true,
+      },
+    });
+
+    // Seamlessly preserve legacy Collaboration pipeline
+    const existingCollab = await prisma.collaboration.findFirst({
+      where: { problemId, industryId: orgId },
+    });
+
+    if (!existingCollab) {
+      await prisma.collaboration.create({
+        data: {
+          problemId,
+          industryId: orgId,
+          supportType: SupportType.TECHNICAL,
+          message: `[Industry Deployment Proposal] ${providedItems} — ${technicalCapability}`,
+          status: CollaborationStatus.INTERESTED,
+        },
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Industry Capability & Deployment Proposal submitted successfully.",
+      proposal,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to submit industry proposal.",
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/industry/proposals
+ * List all capability / deployment proposals submitted by this partner.
+ */
+router.get("/proposals", async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.organizationId;
+    if (!orgId) {
+      res.status(400).json({
+        success: false,
+        error: "Authenticated user must belong to an industry organization.",
+      });
+      return;
+    }
+
+    const { problemId } = req.query;
+    const whereClause: any = { organizationId: orgId };
+    if (problemId && typeof problemId === "string") {
+      whereClause.problemId = problemId;
+    }
+
+    const proposals = await prisma.industryDeploymentProposal.findMany({
+      where: whereClause,
+      include: {
+        problem: {
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            district: true,
+            priorityScore: true,
+            priorityTier: true,
+            status: true,
+            verificationStatus: true,
+          },
+        },
+        capability: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json({
+      success: true,
+      count: proposals.length,
+      proposals,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch industry proposals.",
+      details: error.message,
+    });
+  }
+});
+
+// =============================================================================
+// 5. EXISTING COLLABORATION & SUPPORT PIPELINES (Preserved for Golden Demo & Backwards Compatibility)
+// =============================================================================
+
+/**
+ * GET /api/industry/recommended-problems
  */
 router.get("/recommended-problems", async (req: Request, res: Response) => {
   try {
@@ -411,7 +1261,6 @@ router.get("/recommended-problems", async (req: Request, res: Response) => {
       return;
     }
 
-    // Fetch AI-passed problems (Zero-Gate principle: verification is a trust signal, not a gate)
     const problems = await prisma.problem.findMany({
       where: {
         filterStatus: FilterStatus.PASSED,
@@ -429,20 +1278,6 @@ router.get("/recommended-problems", async (req: Request, res: Response) => {
             industryId: true,
             supportType: true,
             status: true,
-          },
-        },
-        proposals: {
-          select: {
-            id: true,
-            universityId: true,
-            status: true,
-          },
-        },
-        businessConcepts: {
-          select: {
-            id: true,
-            startupId: true,
-            currentStage: true,
           },
         },
         _count: {
@@ -490,7 +1325,6 @@ router.get("/recommended-problems", async (req: Request, res: Response) => {
       };
     });
 
-    // Sort by match score descending
     recommendations.sort((a, b) => b.matchScore - a.matchScore);
 
     res.json({
@@ -507,11 +1341,8 @@ router.get("/recommended-problems", async (req: Request, res: Response) => {
   }
 });
 
-// =============================================================================
-// 3. GET /api/industry/my-collaborations
-// =============================================================================
 /**
- * Returns all collaborations belonging strictly to the authenticated industry organization.
+ * GET /api/industry/my-collaborations
  */
 router.get("/my-collaborations", async (req: Request, res: Response) => {
   try {
@@ -597,12 +1428,8 @@ router.get("/my-collaborations", async (req: Request, res: Response) => {
   }
 });
 
-// =============================================================================
-// 4. POST /api/industry/collaborations
-// =============================================================================
 /**
- * Register a new industry collaboration on an eligible problem.
- * Prevents duplicate collaborations from the same industry organization on the same problem.
+ * POST /api/industry/collaborations
  */
 router.post("/collaborations", async (req: Request, res: Response) => {
   try {
@@ -647,7 +1474,6 @@ router.post("/collaborations", async (req: Request, res: Response) => {
       return;
     }
 
-    // Prevent duplicate collaborations by the same industry organization
     const existingCollab = await prisma.collaboration.findFirst({
       where: {
         problemId,
@@ -697,11 +1523,8 @@ router.post("/collaborations", async (req: Request, res: Response) => {
   }
 });
 
-// =============================================================================
-// 5. GET /api/industry/support-requests
-// =============================================================================
 /**
- * View support requests sent to INDUSTRY by startups.
+ * GET /api/industry/support-requests
  */
 router.get("/support-requests", async (req: Request, res: Response) => {
   try {
@@ -766,12 +1589,8 @@ router.get("/support-requests", async (req: Request, res: Response) => {
   }
 });
 
-// =============================================================================
-// 6. POST /api/industry/support-requests/:id/respond
-// =============================================================================
 /**
- * Accept (approve) or decline (reject) a support request from a startup.
- * Advances the startup's BusinessConcept to SUPPORT_GRANTED if approved.
+ * POST /api/industry/support-requests/:id/respond
  */
 router.post("/support-requests/:id/respond", async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -821,7 +1640,6 @@ router.post("/support-requests/:id/respond", async (req: Request, res: Response)
       return;
     }
 
-    // Update the support request status
     const updatedRequest = await prisma.supportRequest.update({
       where: { id },
       data: {
@@ -830,7 +1648,6 @@ router.post("/support-requests/:id/respond", async (req: Request, res: Response)
       },
     });
 
-    // If approved and startup's concept is currently in SUPPORT_REQUESTED, promote to SUPPORT_GRANTED
     if (status === "APPROVED" && supportRequest.businessConcept.currentStage === VentureStage.SUPPORT_REQUESTED) {
       await prisma.businessConcept.update({
         where: { id: supportRequest.businessConceptId },

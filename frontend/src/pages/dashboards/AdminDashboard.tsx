@@ -691,7 +691,7 @@ export const AdminDashboard: React.FC = () => {
                     <option value="ALL">All Verification States</option>
                     <option value="AI_SCREENED">AI Screened (Actionable)</option>
                     <option value="GOVERNMENT_VERIFIED">Government Verified</option>
-                    <option value="DECLINED_BY_GOVT">Declined by Govt</option>
+                    <option value="DECLINED_BY_GOVT">Govt Review: Open for Solvers</option>
                   </select>
                 </div>
               </div>
@@ -1128,8 +1128,8 @@ export const AdminDashboard: React.FC = () => {
                                 Verified
                               </span>
                             ) : prob.verificationStatus === "DECLINED_BY_GOVT" ? (
-                              <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 rounded">
-                                Declined
+                              <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 rounded">
+                                Open for Solvers
                               </span>
                             ) : (
                               <span className="px-2 py-0.5 text-[10px] font-bold bg-teal-100 text-teal-800 rounded">

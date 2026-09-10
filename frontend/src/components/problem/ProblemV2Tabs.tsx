@@ -6,8 +6,10 @@ import {
   PlusCircle,
   X,
   MessageSquare,
+  Sparkles,
+  Boxes,
 } from "lucide-react";
-import { Role } from "../../types";
+import { Role, IndustryDeploymentProposal } from "../../types";
 import { API_BASE_URL } from "../../config/api";
 
 interface ProgressItem {
@@ -87,6 +89,7 @@ interface ProblemV2TabsProps {
   proposals: ProposalItem[];
   concepts: BusinessConceptItem[];
   collaborations: CollaborationItem[];
+  industryProposals?: IndustryDeploymentProposal[];
   userRole?: Role;
   userOrgId?: string | null;
   token?: string | null;
@@ -98,6 +101,7 @@ export const ProblemV2Tabs: React.FC<ProblemV2TabsProps> = ({
   proposals,
   concepts,
   collaborations,
+  industryProposals = [],
   userRole,
   userOrgId,
   token,
@@ -109,6 +113,19 @@ export const ProblemV2Tabs: React.FC<ProblemV2TabsProps> = ({
   const [showProposalModal, setShowProposalModal] = useState(false);
   const [showConceptModal, setShowConceptModal] = useState(false);
   const [showCollabModal, setShowCollabModal] = useState(false);
+  const [showIndustryProposalModal, setShowIndustryProposalModal] = useState(false);
+  const [industryCapabilities, setIndustryCapabilities] = useState<any[]>([]);
+  const [industryProposalForm, setIndustryProposalForm] = useState({
+    capabilityId: "",
+    providedItems: "",
+    technicalCapability: "",
+    relevantProductService: "",
+    previousDeployment: "",
+    deploymentRequirements: "",
+    expectedTimeline: "4-6 Weeks",
+    estimatedCost: "CSR Funded (INR 0 to Govt)",
+    expectedCivicImpact: "",
+  });
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [progressTarget, setProgressTarget] = useState<{
     type: "proposal" | "concept" | "collab";
@@ -205,6 +222,10 @@ export const ProblemV2Tabs: React.FC<ProblemV2TabsProps> = ({
   const handleCollabSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
+    if (collabForm.message.trim().length < 10) {
+      setFeedback({ type: "error", text: "Collaboration message must be at least 10 characters." });
+      return;
+    }
     setIsSubmitting(true);
     setFeedback(null);
     try {
@@ -221,6 +242,92 @@ export const ProblemV2Tabs: React.FC<ProblemV2TabsProps> = ({
       setFeedback({ type: "success", text: "Industry collaboration offer submitted successfully!" });
       setShowCollabModal(false);
       setCollabForm({ supportType: "MENTORSHIP", message: "" });
+      await onRefresh();
+    } catch (err: any) {
+      setFeedback({ type: "error", text: err.message });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenIndustryProposal = async () => {
+    setShowIndustryProposalModal(true);
+    if (token && userRole === "INDUSTRY") {
+      try {
+        const res = await fetch(`${API_BASE_URL}/industry/capabilities`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await res.json();
+        if (json.success && Array.isArray(json.capabilities)) {
+          setIndustryCapabilities(json.capabilities);
+        }
+      } catch (err) {
+        console.warn("Could not fetch user capabilities:", err);
+      }
+    }
+  };
+
+  const handleSelectIndustryCapability = (capId: string) => {
+    const cap = industryCapabilities.find((c) => c.id === capId);
+    if (!cap) {
+      setIndustryProposalForm({ ...industryProposalForm, capabilityId: "" });
+      return;
+    }
+    setIndustryProposalForm({
+      ...industryProposalForm,
+      capabilityId: cap.id,
+      relevantProductService: cap.title,
+      providedItems: `Deployment & commissioning of ${cap.title}`,
+      technicalCapability: cap.description,
+      previousDeployment: cap.caseStudies || industryProposalForm.previousDeployment,
+    });
+  };
+
+  const handleIndustryProposalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    if (industryProposalForm.providedItems.trim().length < 5) {
+      setFeedback({ type: "error", text: "Please describe what items/equipment your organization provides." });
+      return;
+    }
+    if (industryProposalForm.technicalCapability.trim().length < 5) {
+      setFeedback({ type: "error", text: "Please describe your technical capability." });
+      return;
+    }
+    setIsSubmitting(true);
+    setFeedback(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/industry/proposals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          problemId,
+          capabilityId: industryProposalForm.capabilityId || null,
+          providedItems: industryProposalForm.providedItems.trim(),
+          technicalCapability: industryProposalForm.technicalCapability.trim(),
+          relevantProductService: industryProposalForm.relevantProductService.trim() || null,
+          previousDeployment: industryProposalForm.previousDeployment.trim() || null,
+          deploymentRequirements: industryProposalForm.deploymentRequirements.trim() || null,
+          expectedTimeline: industryProposalForm.expectedTimeline.trim(),
+          estimatedCost: industryProposalForm.estimatedCost.trim() || null,
+          expectedCivicImpact: industryProposalForm.expectedCivicImpact.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to submit deployment proposal");
+      setFeedback({ type: "success", text: "Capability & Deployment proposal submitted successfully!" });
+      setShowIndustryProposalModal(false);
+      setIndustryProposalForm({
+        capabilityId: "",
+        providedItems: "",
+        technicalCapability: "",
+        relevantProductService: "",
+        previousDeployment: "",
+        deploymentRequirements: "",
+        expectedTimeline: "4-6 Weeks",
+        estimatedCost: "CSR Funded (INR 0 to Govt)",
+        expectedCivicImpact: "",
+      });
       await onRefresh();
     } catch (err: any) {
       setFeedback({ type: "error", text: err.message });
@@ -300,7 +407,7 @@ export const ProblemV2Tabs: React.FC<ProblemV2TabsProps> = ({
           }`}
         >
           <Building2 className="w-4 h-4" />
-          <span>Industry CSR Offers ({collaborations.length})</span>
+          <span>Industry Solutions ({(industryProposals?.length || 0) + collaborations.length})</span>
         </button>
       </div>
 
@@ -433,27 +540,31 @@ export const ProblemV2Tabs: React.FC<ProblemV2TabsProps> = ({
             ) : (
               <div className="space-y-3">
                 {concepts.map((concept) => (
-                  <div key={concept.id} className="p-4 rounded-lg border border-slate-200 bg-white space-y-2">
+                  <div key={concept.id} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-xs">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
+                      <div className="space-y-0.5">
                         <h4 className="text-xs sm:text-sm font-bold text-slate-900">
-                          {concept.title || "Startup Solution Concept"}
+                          {concept.marketSize || concept.title || "Startup Solution Proposal"}
                         </h4>
-                        <span className="text-[11px] text-slate-500">
-                          {concept.startup?.name || "Startup Partner"} ({concept.startup?.district || "Jharkhand"})
+                        <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                          <span className="font-semibold text-slate-700">{concept.startup?.name || "Startup Partner"}</span>
+                          {concept.startup?.district && <span>· {concept.startup.district}</span>}
+                          {concept.createdAt && (
+                            <span className="text-slate-400">· {new Date(concept.createdAt).toLocaleDateString()}</span>
+                          )}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 uppercase">
-                          {concept.status}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-800 border border-cyan-200 uppercase">
+                          {concept.currentStage?.replace("_", " ") || concept.status || "Submitted"}
                         </span>
                         {userOrgId && concept.startupId === userOrgId && (
                           <button
                             onClick={() => {
-                              setProgressTarget({ type: "concept", id: concept.id, title: concept.title || "Concept" });
+                              setProgressTarget({ type: "concept", id: concept.id, title: concept.marketSize || concept.title || "Concept" });
                               setShowProgressModal(true);
                             }}
-                            className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1"
+                            className="text-[11px] font-semibold text-cyan-700 hover:text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200 flex items-center gap-1"
                           >
                             <MessageSquare className="w-3 h-3" />
                             <span>Update</span>
@@ -461,10 +572,41 @@ export const ProblemV2Tabs: React.FC<ProblemV2TabsProps> = ({
                         )}
                       </div>
                     </div>
-                    <p className="text-xs text-slate-700">{concept.solutionDescription}</p>
+
+                    <div className="text-xs text-slate-700 whitespace-pre-line leading-relaxed bg-slate-50/70 p-3 rounded-lg border border-slate-100">
+                      {concept.solutionDescription}
+                    </div>
+
                     {concept.businessModel && (
-                      <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded">
-                        <strong>Business Model: </strong> {concept.businessModel}
+                      <div className="text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 whitespace-pre-line">
+                        {concept.businessModel}
+                      </div>
+                    )}
+
+                    {concept.revenueModel && !concept.businessModel?.includes(concept.revenueModel) && (
+                      <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
+                        <strong>Financial Model: </strong> {concept.revenueModel}
+                      </div>
+                    )}
+
+                    {concept.sustainabilityModel && (
+                      <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded border border-slate-100 whitespace-pre-line">
+                        {concept.sustainabilityModel}
+                      </div>
+                    )}
+
+                    {/* Progress updates if any */}
+                    {concept.progressUpdates && concept.progressUpdates.length > 0 && (
+                      <div className="pt-2 border-t border-slate-100 space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-slate-500">Latest Updates:</span>
+                        {concept.progressUpdates.slice(0, 2).map((u) => (
+                          <div key={u.id} className="text-[11px] text-slate-600 flex items-center justify-between">
+                            <span>{u.updateText}</span>
+                            <span className="text-slate-400 text-[10px]">
+                              {new Date(u.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -474,36 +616,107 @@ export const ProblemV2Tabs: React.FC<ProblemV2TabsProps> = ({
           </div>
         )}
 
-        {/* Industry Collaborations Tab */}
+        {/* Industry Collaborations & Deployments Tab */}
         {activeTab === "collaborations" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs text-slate-500 font-medium">
-                Corporate Social Responsibility (CSR), technical sponsorship, and co-development.
+                Industrial hardware, testing facilities, and technical deployment proposals.
               </span>
               {userRole === "INDUSTRY" && userOrgId && (
-                <button
-                  onClick={() => setShowCollabModal(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  <span>Offer Collaboration</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleOpenIndustryProposal}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-xs"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>How Can We Contribute?</span>
+                  </button>
+                  <button
+                    onClick={() => setShowCollabModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    <span>Quick Offer</span>
+                  </button>
+                </div>
               )}
             </div>
 
-            {collaborations.length === 0 ? (
-              <div className="text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                <Building2 className="w-7 h-7 text-slate-400 mx-auto mb-1.5" />
-                <p className="text-xs font-medium text-slate-700">No industry CSR commitments registered yet.</p>
-                <p className="text-[11px] text-slate-500">
-                  Industrial partners can offer funding, equipment, or mentorship.
-                </p>
-              </div>
-            ) : (
+            {/* Display Industry Deployment Proposals */}
+            {industryProposals && industryProposals.length > 0 && (
               <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                  <Boxes className="w-3.5 h-3.5 text-teal-600" />
+                  Industrial Capability & Deployment Proposals ({industryProposals.length})
+                </h4>
+                {industryProposals.map((prop) => (
+                  <div key={prop.id} className="p-4 rounded-xl border border-teal-200 bg-teal-50/20 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                            {prop.organization?.name || "Industry Partner"}
+                          </h4>
+                          {prop.organization?.companyType && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-100 text-teal-800">
+                              {prop.organization.companyType}
+                            </span>
+                          )}
+                        </div>
+                        {prop.relevantProductService && (
+                          <span className="text-xs text-teal-800 font-semibold block mt-0.5">
+                            Product/Service: {prop.relevantProductService}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 uppercase">
+                        {prop.status}
+                      </span>
+                    </div>
+
+                    <div className="text-xs space-y-1 bg-white p-3 rounded-lg border border-slate-100">
+                      <div>
+                        <strong className="text-slate-800">What Partner Provides:</strong>{" "}
+                        <span className="text-slate-600">{prop.providedItems}</span>
+                      </div>
+                      <div>
+                        <strong className="text-slate-800">Technical Capability:</strong>{" "}
+                        <span className="text-slate-600">{prop.technicalCapability}</span>
+                      </div>
+                      {prop.deploymentRequirements && (
+                        <div>
+                          <strong className="text-slate-800">Deployment Requirements:</strong>{" "}
+                          <span className="text-slate-600">{prop.deploymentRequirements}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 flex-wrap gap-2">
+                      <span>Timeline: <strong>{prop.expectedTimeline}</strong></span>
+                      <span>Cost: <strong>{prop.estimatedCost || "CSR Funded"}</strong></span>
+                    </div>
+
+                    {prop.expectedCivicImpact && (
+                      <div className="text-[11px] text-emerald-900 bg-emerald-50 p-2 rounded-md border border-emerald-100">
+                        <strong>Expected Civic Impact:</strong> {prop.expectedCivicImpact}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Display General Collaborations */}
+            {collaborations.length > 0 && (
+              <div className="space-y-3">
+                {industryProposals && industryProposals.length > 0 && (
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide pt-2">
+                    Additional CSR & Mentorship Offers ({collaborations.length})
+                  </h4>
+                )}
                 {collaborations.map((collab) => (
-                  <div key={collab.id} className="p-4 rounded-lg border border-slate-200 bg-white space-y-2">
+                  <div key={collab.id} className="p-4 rounded-xl border border-slate-200 bg-white space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <h4 className="text-xs sm:text-sm font-bold text-slate-900">
@@ -520,6 +733,16 @@ export const ProblemV2Tabs: React.FC<ProblemV2TabsProps> = ({
                     <p className="text-xs text-slate-700">{collab.message}</p>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {(!industryProposals || industryProposals.length === 0) && collaborations.length === 0 && (
+              <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200 space-y-1.5">
+                <Building2 className="w-7 h-7 text-slate-400 mx-auto mb-1" />
+                <p className="text-xs font-bold text-slate-700">No industry commitments or deployment proposals yet.</p>
+                <p className="text-[11px] text-slate-500">
+                  Industrial partners can propose engineered hardware, testing labs, or CSR deployment.
+                </p>
               </div>
             )}
           </div>
@@ -783,6 +1006,159 @@ export const ProblemV2Tabs: React.FC<ProblemV2TabsProps> = ({
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-xs"
                 >
                   {isSubmitting ? "Submitting..." : "Submit Offer"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Industry Deployment Proposal Modal */}
+      {showIndustryProposalModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in my-8">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-teal-900 to-slate-900 text-white">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-teal-400" />
+                <h3 className="text-sm font-bold">How Can We Contribute? — Propose Solution / Deployment</h3>
+              </div>
+              <button
+                onClick={() => setShowIndustryProposalModal(false)}
+                className="text-slate-300 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleIndustryProposalSubmit} className="p-5 space-y-4 text-xs">
+              {industryCapabilities.length > 0 && (
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Pre-fill from Published Catalog Item (Optional)
+                  </label>
+                  <select
+                    value={industryProposalForm.capabilityId}
+                    onChange={(e) => handleSelectIndustryCapability(e.target.value)}
+                    className="w-full px-3 py-2 bg-teal-50/50 border border-teal-200 rounded-xl text-teal-950 font-medium"
+                  >
+                    <option value="">-- Custom Engineering Solution --</option>
+                    {industryCapabilities.map((cap) => (
+                      <option key={cap.id} value={cap.id}>
+                        [{cap.type}] {cap.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">What Your Company Provides *</label>
+                <textarea
+                  required
+                  rows={2}
+                  value={industryProposalForm.providedItems}
+                  onChange={(e) => setIndustryProposalForm({ ...industryProposalForm, providedItems: e.target.value })}
+                  placeholder="e.g. 3x Industrial Slag & Carbon Adsorption Units with complete manifolds"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Technical Capability Deployed *</label>
+                <textarea
+                  required
+                  rows={2}
+                  value={industryProposalForm.technicalCapability}
+                  onChange={(e) => setIndustryProposalForm({ ...industryProposalForm, technicalCapability: e.target.value })}
+                  placeholder="e.g. Continuous chemical effluent neutralization and heavy metal precipitation"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Relevant Product / Service</label>
+                  <input
+                    type="text"
+                    value={industryProposalForm.relevantProductService}
+                    onChange={(e) => setIndustryProposalForm({ ...industryProposalForm, relevantProductService: e.target.value })}
+                    placeholder="e.g. Adsorption Unit TS-ADS-2500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Previous Deployment Track Record</label>
+                  <input
+                    type="text"
+                    value={industryProposalForm.previousDeployment}
+                    onChange={(e) => setIndustryProposalForm({ ...industryProposalForm, previousDeployment: e.target.value })}
+                    placeholder="e.g. Deployed in Jamshedpur industrial corridor"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Deployment Requirements</label>
+                <input
+                  type="text"
+                  value={industryProposalForm.deploymentRequirements}
+                  onChange={(e) => setIndustryProposalForm({ ...industryProposalForm, deploymentRequirements: e.target.value })}
+                  placeholder="e.g. Site clearance from district administration; 15 sqm level concrete pad"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Expected Timeline *</label>
+                  <input
+                    type="text"
+                    required
+                    value={industryProposalForm.expectedTimeline}
+                    onChange={(e) => setIndustryProposalForm({ ...industryProposalForm, expectedTimeline: e.target.value })}
+                    placeholder="e.g. 4-6 Weeks"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Estimated Cost / CSR Budget</label>
+                  <input
+                    type="text"
+                    value={industryProposalForm.estimatedCost}
+                    onChange={(e) => setIndustryProposalForm({ ...industryProposalForm, estimatedCost: e.target.value })}
+                    placeholder="e.g. CSR Funded (INR 0 to Govt)"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Expected Civic Impact *</label>
+                <textarea
+                  required
+                  rows={2}
+                  value={industryProposalForm.expectedCivicImpact}
+                  onChange={(e) => setIndustryProposalForm({ ...industryProposalForm, expectedCivicImpact: e.target.value })}
+                  placeholder="e.g. Neutralizes heavy metal effluent, restoring water safety for 1,500 downstream residents."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowIndustryProposalModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-xs"
+                >
+                  {isSubmitting ? "Submitting..." : "Submit Deployment Proposal"}
                 </button>
               </div>
             </form>

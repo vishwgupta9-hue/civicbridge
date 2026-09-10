@@ -90,6 +90,7 @@ import collaborationRouter from "./routes/collaboration.routes.js";
 import milestoneRouter from "./routes/milestone.routes.js";
 import progressRouter from "./routes/progress.routes.js";
 import pilotRouter from "./routes/pilot.routes.js";
+import socialRouter from "./routes/social.routes.js";
 import path from "path";
 
 // Static uploads serving (with cross-origin headers)
@@ -117,6 +118,19 @@ app.use("/api/collaborations", collaborationRouter);
 app.use("/api/milestones", milestoneRouter);
 app.use("/api/progress-updates", progressRouter);
 app.use("/api/pilots", pilotRouter);
+
+// Civic Social Platform Routes
+app.use("/api/social", socialRouter);
+app.use("/api/citizen", socialRouter);
+app.use("/api", socialRouter);
+
+// Catch-all 404 for unhandled API routes (ensures JSON response instead of default Express HTML)
+app.all("/api/*", (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: `API endpoint not found: ${req.method} ${req.originalUrl}`,
+  });
+});
 
 // Global error handler
 app.use(errorHandler);

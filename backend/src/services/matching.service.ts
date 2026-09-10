@@ -1,10 +1,19 @@
 import prisma from "../lib/prisma.js";
-import { OfferCategory, NeedUrgency } from "@prisma/client";
+import { NeedUrgency } from "@prisma/client";
 
 export interface MatchScoreResult<T> {
   item: T;
+  offer?: any;
+  need?: any;
   score: number;
   matchReasons: string[];
+  breakdown?: {
+    categoryMatch: number;
+    districtMatch: number;
+    textSimilarity: number;
+    urgencyWeight?: number;
+    verifiedBonus?: number;
+  };
 }
 
 /**
@@ -135,8 +144,14 @@ export class MatchingService {
       if (normalizedScore >= minScore) {
         results.push({
           item: offer,
+          offer,
           score: normalizedScore,
           matchReasons,
+          breakdown: {
+            categoryMatch: 40,
+            districtMatch: Math.max(0, Math.min(35, score - 40)),
+            textSimilarity: 15,
+          },
         });
       }
     }
@@ -249,8 +264,14 @@ export class MatchingService {
       if (normalizedScore >= minScore) {
         results.push({
           item: need,
+          need,
           score: normalizedScore,
           matchReasons,
+          breakdown: {
+            categoryMatch: 40,
+            districtMatch: Math.max(0, Math.min(35, score - 40)),
+            textSimilarity: 15,
+          },
         });
       }
     }

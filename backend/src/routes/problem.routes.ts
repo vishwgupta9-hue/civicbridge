@@ -35,6 +35,7 @@ export const createProblemSchema = z.object({
   longitude: z.number().optional().nullable(),
   affectedCount: z.coerce.number().int().min(1, "Affected count must be at least 1").optional().default(1),
   evidenceUrl: z.string().trim().optional().nullable(),
+  videoUrl: z.string().trim().optional().nullable(),
 });
 
 /**
@@ -347,6 +348,7 @@ router.post(
           longitude: data.longitude || null,
           affectedCount: data.affectedCount,
           evidenceUrl: resolvedEvidenceUrl,
+          videoUrl: data.videoUrl || null,
 
           // Mandatory initial state for Phase 4A
           status: ProblemStatus.OPEN,
@@ -581,11 +583,35 @@ router.get("/:id", optionalAuthenticate, async (req: Request, res: Response) => 
             },
           },
         },
+        industryProposals: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            organization: {
+              select: {
+                id: true,
+                name: true,
+                type: true,
+                district: true,
+                companyType: true,
+                certifications: true,
+              },
+            },
+            capability: {
+              select: {
+                id: true,
+                type: true,
+                title: true,
+                category: true,
+              },
+            },
+          },
+        },
         _count: {
           select: {
             proposals: true,
             businessConcepts: true,
             collaborations: true,
+            industryProposals: true,
           },
         },
       },

@@ -475,4 +475,48 @@ router.get("/dashboard", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/university/my-needs
+ * Returns resource/technical needs published by the authenticated university organization.
+ * Reuses the existing Need model. No schema change.
+ */
+router.get("/my-needs", async (req: Request, res: Response) => {
+  if (!req.user?.organizationId) {
+    res.status(400).json({
+      success: false,
+      error: "Authenticated user must be associated with a registered university organization.",
+    });
+    return;
+  }
+
+  try {
+    const needs = await prisma.need.findMany({
+      where: { creatorOrgId: req.user.organizationId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        project: {
+          select: { id: true, title: true, status: true },
+        },
+        milestone: {
+          select: { id: true, title: true },
+        },
+      },
+      take: 20,
+    });
+
+    res.status(200).json({
+      success: true,
+      count: needs.length,
+      needs,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch university technical needs.",
+      details: error.message,
+    });
+  }
+});
+
 export default router;
+

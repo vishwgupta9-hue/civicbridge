@@ -7,16 +7,25 @@ import { DefaultArgs } from "@prisma/client/runtime/library.js";
 
 const router = Router();
 
-// Validation schema for creating a collaboration proposal
+// Validation schema for creating a collaboration proposal (supports both Need and Offer driven requests)
 const createCollaborationSchema = z.object({
-  needId: z.string().uuid("Invalid Need ID format"),
-  offerId: z.string().uuid("Invalid Offer ID format"),
+  needId: z.string().uuid("Invalid Need ID format").optional().nullable(),
+  offerId: z.string().uuid("Invalid Offer ID format").optional().nullable(),
+  providerOrgId: z.string().uuid("Invalid provider org ID format").optional().nullable(),
+  recipientOrgId: z.string().uuid("Invalid recipient org ID format").optional().nullable(),
   contributionScope: z
     .string()
     .trim()
-    .min(10, "Contribution scope must be at least 10 characters")
-    .max(5000, "Contribution scope cannot exceed 5000 characters"),
-  expectedCompletionDate: z.string().datetime().optional().nullable(),
+    .min(5, "Contribution scope must be at least 5 characters")
+    .max(5000, "Contribution scope cannot exceed 5000 characters")
+    .optional(),
+  terms: z
+    .string()
+    .trim()
+    .min(5, "Terms must be at least 5 characters")
+    .max(5000, "Terms cannot exceed 5000 characters")
+    .optional(),
+  expectedCompletionDate: z.string().optional().nullable(),
 });
 
 // Validation schema for deliverable submission
@@ -28,14 +37,15 @@ const deliverCollaborationSchema = z.object({
 // Validation schema for decline/cancel notes
 const notesSchema = z.object({
   notes: z.string().trim().max(1000).optional().nullable(),
+  reason: z.string().trim().max(1000).optional().nullable(),
 });
 
 /**
- * POST /api/collaborations
- * Create a structured collaboration commitment request between a Need and an Offer.
- * RBAC: Institutional roles (UNIVERSITY, STARTUP, INDUSTRY, ADMIN) belonging to either org.
+ * POST /api/collaborations and POST /api/collaborations/request
+ * Create a structured collaboration commitment request between an Offer and/or a Need.
+ * RBAC: Institutional roles (UNIVERSITY, STARTUP, INDUSTRY, ADMIN).
  */
-router.post("/", authenticate, async (req: Request, res: Response) => {
+router.post(["/", "/request"], authenticate, async (req: Request, res: Response) => {
   try {
     const userRole = req.user?.role;
     const userOrgId = req.user?.organizationId;
@@ -58,39 +68,60 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
       return;
     }
 
-    const { needId, offerId, contributionScope, expectedCompletionDate } = parseResult.data;
+    const {
+      needId,
+      offerId,
+      expectedCompletionDate,
+    } = parseResult.data;
 
-    // Fetch Need with linked project problems
-    const need = await prisma.need.findUnique({
-      where: { id: needId },
-      include: {
-        creatorOrg: true,
-        project: {
-          include: {
-            problems: true,
-          },
-        },
-      },
-    });
+    const contributionScope =
+      parseResult.data.contributionScope ||
+      parseResult.data.terms ||
+      "Bilateral institutional collaboration commitment";
 
-    if (!need) {
-      res.status(404).json({ success: false, error: "Need not found." });
+    if (!needId && !offerId) {
+      res.status(400).json({
+        success: false,
+        error: "Either needId or offerId must be specified to initiate a collaboration.",
+      });
       return;
     }
 
-    // Fetch Offer with provider org
-    const offer = await prisma.offer.findUnique({
-      where: { id: offerId },
-      include: { providerOrg: true },
-    });
+    // Fetch Need if specified
+    const need = needId
+      ? await prisma.need.findUnique({
+          where: { id: needId },
+          include: {
+            creatorOrg: true,
+            project: {
+              include: {
+                problems: true,
+              },
+            },
+          },
+        })
+      : null;
 
-    if (!offer) {
-      res.status(404).json({ success: false, error: "Offer not found." });
+    if (needId && !need) {
+      res.status(404).json({ success: false, error: "Specified Need not found." });
+      return;
+    }
+
+    // Fetch Offer if specified
+    const offer = offerId
+      ? await prisma.offer.findUnique({
+          where: { id: offerId },
+          include: { providerOrg: true },
+        })
+      : null;
+
+    if (offerId && !offer) {
+      res.status(404).json({ success: false, error: "Specified Offer not found." });
       return;
     }
 
     // Validate active states
-    if (offer.status !== "ACTIVE") {
+    if (offer && offer.status !== "ACTIVE") {
       res.status(400).json({
         success: false,
         error: `Cannot propose collaboration on an Offer with status '${offer.status}'. Offer must be ACTIVE.`,
@@ -98,7 +129,7 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
       return;
     }
 
-    if (need.status === NeedStatus.CANCELLED || need.status === NeedStatus.FULFILLED) {
+    if (need && (need.status === NeedStatus.CANCELLED || need.status === NeedStatus.FULFILLED)) {
       res.status(400).json({
         success: false,
         error: `Cannot propose collaboration on a Need with status '${need.status}'.`,
@@ -106,21 +137,27 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
       return;
     }
 
-    // Ownership check: Requester must belong to Need creator org OR Offer provider org (or Admin)
-    const isNeedOwner = need.creatorOrgId === userOrgId;
-    const isOfferOwner = offer.providerOrgId === userOrgId;
-    const isAdmin = userRole === Role.ADMIN;
+    // Resolve providerOrgId and recipientOrgId
+    const resolvedProviderOrgId =
+      offer?.providerOrgId ||
+      parseResult.data.providerOrgId ||
+      (need && need.creatorOrgId !== userOrgId ? userOrgId : null);
 
-    if (!isNeedOwner && !isOfferOwner && !isAdmin) {
-      res.status(403).json({
+    const resolvedRecipientOrgId =
+      need?.creatorOrgId ||
+      parseResult.data.recipientOrgId ||
+      (offer && offer.providerOrgId !== userOrgId ? userOrgId : null);
+
+    if (!resolvedProviderOrgId || !resolvedRecipientOrgId) {
+      res.status(400).json({
         success: false,
-        error: "Access denied. You can only initiate collaborations involving your organization.",
+        error: "Both provider and recipient organizations must be identifiable.",
       });
       return;
     }
 
     // Prevent self-collaboration
-    if (need.creatorOrgId === offer.providerOrgId) {
+    if (resolvedProviderOrgId === resolvedRecipientOrgId) {
       res.status(400).json({
         success: false,
         error: "Self-collaboration is not permitted. An organization cannot collaborate with itself.",
@@ -129,42 +166,65 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
     }
 
     // Check duplicate active request
-    const existingActive = await prisma.collaboration.findFirst({
-      where: {
-        needId,
-        offerId,
-        status: {
-          in: [
-            CollaborationStatus.PROPOSED,
-            CollaborationStatus.ACCEPTED,
-            CollaborationStatus.IN_PROGRESS,
-          ],
+    if (needId && offerId) {
+      const existingActive = await prisma.collaboration.findFirst({
+        where: {
+          needId,
+          offerId,
+          status: {
+            in: [
+              CollaborationStatus.PROPOSED,
+              CollaborationStatus.ACCEPTED,
+              CollaborationStatus.IN_PROGRESS,
+            ],
+          },
         },
-      },
-    });
-
-    if (existingActive) {
-      res.status(400).json({
-        success: false,
-        error: `An active collaboration already exists for this Need and Offer in state '${existingActive.status}'.`,
       });
-      return;
+
+      if (existingActive) {
+        res.status(400).json({
+          success: false,
+          error: `An active collaboration already exists for this Need and Offer in state '${existingActive.status}'.`,
+        });
+        return;
+      }
     }
 
     // Determine primary problem ID if available
-    const primaryProblemId = need.project?.problems[0]?.problemId || null;
+    const primaryProblemId = need?.project?.problems[0]?.problemId || null;
+
+    // Fetch org details to set legacy industryId
+    const [provOrg, recipOrg] = await Promise.all([
+      prisma.organization.findUnique({ where: { id: resolvedProviderOrgId } }),
+      prisma.organization.findUnique({ where: { id: resolvedRecipientOrgId } }),
+    ]);
+
+    const industryOrgId =
+      provOrg?.type === "INDUSTRY"
+        ? provOrg.id
+        : recipOrg?.type === "INDUSTRY"
+        ? recipOrg.id
+        : resolvedProviderOrgId;
+
+    let parsedDate: Date | null = null;
+    if (expectedCompletionDate) {
+      const d = new Date(expectedCompletionDate);
+      if (!isNaN(d.getTime())) {
+        parsedDate = d;
+      }
+    }
 
     const collaboration = await prisma.collaboration.create({
       data: {
-        needId,
-        offerId,
-        providerOrgId: offer.providerOrgId,
-        recipientOrgId: need.creatorOrgId,
-        projectId: need.projectId,
+        needId: needId || null,
+        offerId: offerId || null,
+        providerOrgId: resolvedProviderOrgId,
+        recipientOrgId: resolvedRecipientOrgId,
+        projectId: need?.projectId || null,
         problemId: primaryProblemId,
-        industryId: offer.providerOrg.type === "INDUSTRY" ? offer.providerOrgId : (need.creatorOrg.type === "INDUSTRY" ? need.creatorOrgId : offer.providerOrgId),
+        industryId: industryOrgId,
         contributionScope,
-        expectedCompletionDate: expectedCompletionDate ? new Date(expectedCompletionDate) : null,
+        expectedCompletionDate: parsedDate,
         status: CollaborationStatus.PROPOSED,
         message: contributionScope,
       },
@@ -442,10 +502,10 @@ router.post("/:id/accept", authenticate, async (req: Request, res: Response) => 
 });
 
 /**
- * POST /api/collaborations/:id/decline
+ * POST /api/collaborations/:id/decline and /api/collaborations/:id/reject
  * Decline a proposed collaboration commitment.
  */
-router.post("/:id/decline", authenticate, async (req: Request, res: Response) => {
+router.post(["/:id/decline", "/:id/reject"], authenticate, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const userOrgId = req.user?.organizationId;
@@ -478,7 +538,7 @@ router.post("/:id/decline", authenticate, async (req: Request, res: Response) =>
     }
 
     const parseResult = notesSchema.safeParse(req.body);
-    const notes = parseResult.success ? parseResult.data.notes : null;
+    const notes = parseResult.success ? (parseResult.data.notes || parseResult.data.reason) : null;
 
     const updated = await prisma.collaboration.update({
       where: { id },
@@ -626,10 +686,10 @@ router.post("/:id/deliver", authenticate, async (req: Request, res: Response) =>
 });
 
 /**
- * POST /api/collaborations/:id/confirm
+ * POST /api/collaborations/:id/confirm and /api/collaborations/:id/complete
  * Recipient organization confirms deliverable receipt and satisfaction.
  */
-router.post("/:id/confirm", authenticate, async (req: Request, res: Response) => {
+router.post(["/:id/confirm", "/:id/complete"], authenticate, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const userOrgId = req.user?.organizationId;
@@ -645,19 +705,30 @@ router.post("/:id/confirm", authenticate, async (req: Request, res: Response) =>
       return;
     }
 
-    if (collab.status !== CollaborationStatus.DELIVERED) {
+    const eligibleStatuses: CollaborationStatus[] = [
+      CollaborationStatus.DELIVERED,
+      CollaborationStatus.IN_PROGRESS,
+      CollaborationStatus.ACCEPTED,
+    ];
+
+    if (!eligibleStatuses.includes(collab.status)) {
       res.status(400).json({
         success: false,
-        error: `Cannot confirm collaboration in state '${collab.status}'. Must be DELIVERED first.`,
+        error: `Cannot complete or confirm collaboration in state '${collab.status}'. Must be active or delivered.`,
       });
       return;
     }
 
-    // Only recipientOrg (or Admin) can confirm
-    if (!isAdmin && collab.recipientOrgId !== userOrgId) {
+    // Must belong to recipientOrg, providerOrg, or Admin
+    const isParticipant =
+      isAdmin ||
+      collab.recipientOrgId === userOrgId ||
+      collab.providerOrgId === userOrgId;
+
+    if (!isParticipant) {
       res.status(403).json({
         success: false,
-        error: "Access denied. Only the recipient organization can confirm delivery completion.",
+        error: "Access denied. Only participating organizations or admins can confirm completion.",
       });
       return;
     }

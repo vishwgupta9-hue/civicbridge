@@ -348,8 +348,6 @@ router.patch("/:id", authenticate, async (req: Request, res: Response) => {
 router.post("/:id/submit", authenticate, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const userOrgId = req.user?.organizationId;
-    const isAdmin = req.user?.role === Role.ADMIN;
 
     const milestone = await prisma.milestone.findUnique({
       where: { id },

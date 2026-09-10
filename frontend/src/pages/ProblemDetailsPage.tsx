@@ -9,6 +9,8 @@ import { ProblemOverview } from "../components/problem/ProblemOverview";
 import { ProblemV2Tabs } from "../components/problem/ProblemV2Tabs";
 import { ProblemV3ProjectsCard } from "../components/problem/ProblemV3ProjectsCard";
 import { ProblemV3PilotsCard } from "../components/problem/ProblemV3PilotsCard";
+import { CommentsSection } from "../components/problem/CommentsSection";
+import { CommunityEvidenceTimeline } from "../components/problem/CommunityEvidenceTimeline";
 import { CreateProjectModal } from "../components/project/CreateProjectModal";
 import { ProjectRecord, PilotDeploymentRecord } from "../types";
 import { AlertTriangle, RotateCcw } from "lucide-react";
@@ -175,6 +177,25 @@ export const ProblemDetailsPage: React.FC = () => {
               submittedBy={problem.submittedBy}
             />
 
+            {/* Civic Lifecycle & Community Evidence Timeline */}
+            <CommunityEvidenceTimeline
+              problemId={problem.id}
+              problemTitle={problem.title}
+              initialCreatedAt={problem.createdAt}
+              submitterName={problem.submittedBy?.name}
+              verificationStatus={problem.verificationStatus}
+              verifiedAt={problem.verifiedAt}
+              verifiedBy={problem.verifiedBy}
+              hasProposals={(problem.proposals?.length || 0) > 0}
+              hasProjects={projects.length > 0}
+              hasPilots={pilots.length > 0}
+              isResolved={problem.status === "RESOLVED"}
+              onEvidenceAdded={loadData}
+            />
+
+            {/* Community Discussion & Comments Section */}
+            <CommentsSection problemId={problem.id} />
+
             {/* V3 Projects Section */}
             <ProblemV3ProjectsCard
               problemId={problem.id}
@@ -194,12 +215,13 @@ export const ProblemDetailsPage: React.FC = () => {
             {/* AI Screening Insights */}
             <ProblemAIAnalysisCard analysis={problem.aiAnalysis} />
 
-            {/* Preserved V2 Proposals, Concepts, CSR Collaborations */}
+            {/* Preserved V2 Proposals, Concepts, CSR Collaborations & Industry Deployments */}
             <ProblemV2Tabs
               problemId={problem.id}
               proposals={problem.proposals || []}
               concepts={problem.businessConcepts || []}
               collaborations={problem.collaborations || []}
+              industryProposals={problem.industryProposals || []}
               userRole={user?.role}
               userOrgId={user?.organizationId}
               token={token}

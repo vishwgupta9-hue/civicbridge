@@ -240,6 +240,13 @@ model User {
   verifiedMetrics    PilotMetric[]       @relation("VerifiedMetrics")
   pilotVerifications PilotVerification[] @relation("UserPilotVerifications")
 
+  // Civic Social platform relations
+  comments           ProblemComment[]
+  reactions          ProblemReaction[]
+  evidenceUpdates    ProblemEvidenceUpdate[]
+  notifications      Notification[]          @relation("UserNotifications")
+  actorNotifications Notification[]          @relation("ActorNotifications")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -282,6 +289,16 @@ model Organization {
   responsiblePilots  PilotDeployment[]   @relation("ResponsiblePilots")
   pilotVerifications PilotVerification[] @relation("OrgPilotVerifications")
 
+  // Industry & Solution Partner Capabilities & Proposals
+  companyType         String?
+  industryCategories  String[]                     @default([])
+  certifications      String[]                     @default([])
+  deploymentCapacity  String?
+  locationsServed     String[]                     @default([])
+  caseStudies         String?                      @db.Text
+  capabilities        IndustryCapability[]
+  deploymentProposals IndustryDeploymentProposal[]
+
   createdAt DateTime @default(now())
 
   @@index([type])
@@ -307,6 +324,7 @@ model Problem {
   longitude     Float?
   affectedCount Int     @default(1)
   evidenceUrl   String? // Photo or PDF storage URL
+  videoUrl      String? // Optional video link or secondary evidence URL
 
   // --- Solution Lifecycle (independent of verification and priority) ---
   status ProblemStatus @default(OPEN)
@@ -344,6 +362,15 @@ model Problem {
   supportRequests  SupportRequest[]
   projectProblems  ProjectProblem[]
   pilots           PilotDeployment[]
+
+  // Civic Social Platform Relations
+  comments        ProblemComment[]
+  reactions       ProblemReaction[]
+  evidenceUpdates ProblemEvidenceUpdate[]
+  notifications   Notification[]
+
+  // Industry Solutions & Deployment Proposals
+  industryProposals IndustryDeploymentProposal[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -825,4 +852,162 @@ model PilotVerification {
   @@index([verifierId])
   @@index([organizationId])
   @@index([finding])
+}
+
+// =============================================================================
+// CIVIC SOCIAL PLATFORM MODELS
+// =============================================================================
+
+/// Civic social reactions on problems (Affected Me, Support/Upvote, Follow)
+enum ReactionType {
+  AFFECTED
+  SUPPORT
+  FOLLOW
+}
+
+model ProblemReaction {
+  id        String       @id @default(uuid())
+  problemId String
+  problem   Problem      @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      ReactionType
+  createdAt DateTime     @default(now())
+
+  @@unique([userId, problemId, type])
+  @@index([problemId])
+  @@index([userId])
+  @@index([type])
+}
+
+/// Community discussion and threaded comments on civic problems
+model ProblemComment {
+  id           String           @id @default(uuid())
+  problemId    String
+  problem      Problem          @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentId     String?
+  parent       ProblemComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      ProblemComment[] @relation("CommentReplies")
+  content      String           @db.Text
+  isReported   Boolean          @default(false)
+  reportReason String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([problemId])
+  @@index([authorId])
+  @@index([parentId])
+}
+
+/// Additional photo evidence and community timeline updates
+model ProblemEvidenceUpdate {
+  id            String   @id @default(uuid())
+  problemId     String
+  problem       Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  submittedById String
+  submittedBy   User     @relation(fields: [submittedById], references: [id], onDelete: Cascade)
+  title         String
+  description   String   @db.Text
+  photoUrl      String?
+  videoUrl      String?
+  createdAt     DateTime @default(now())
+
+  @@index([problemId])
+  @@index([submittedById])
+}
+
+/// Civic notification alerts for citizens and stakeholders
+enum NotificationType {
+  COMMENT
+  REPLY
+  STATUS_CHANGE
+  GOVERNMENT_VERIFIED
+  SOLUTION_PROPOSED
+  EVIDENCE_UPDATE
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actor     User?            @relation("ActorNotifications", fields: [actorId], references: [id], onDelete: SetNull)
+  type      NotificationType
+  problemId String?
+  problem   Problem?         @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  title     String
+  message   String           @db.Text
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// INDUSTRY & SOLUTION PARTNER MODELS
+// =============================================================================
+
+/// Capability types published by Industry & Solution Partners
+enum CapabilityType {
+  PRODUCT
+  SERVICE
+  EQUIPMENT_FACILITY
+  TECHNICAL_EXPERTISE
+}
+
+/// Catalog of real industrial products, services, facilities, equipment, and expertise
+model IndustryCapability {
+  id              String                       @id @default(uuid())
+  organizationId  String
+  organization    Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type            CapabilityType
+  title           String
+  description     String                       @db.Text
+  category        String // Manufacturing, Engineering, Testing Laboratories, etc.
+  specifications  Json? // Technical specs, capacity, use cases, location
+  availability    String                       @default("AVAILABLE") // AVAILABLE, SCHEDULED, UPON_REQUEST
+  locationsServed String[]                     @default([])
+  caseStudies     String?                      @db.Text
+  proposals       IndustryDeploymentProposal[]
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+
+  @@index([organizationId])
+  @@index([type])
+  @@index([category])
+  @@index([availability])
+}
+
+/// Tailored Industry Capability & Deployment Proposal for a specific civic problem
+model IndustryDeploymentProposal {
+  id                     String              @id @default(uuid())
+  problemId              String
+  problem                Problem             @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  organizationId         String
+  organization           Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  capabilityId           String?
+  capability             IndustryCapability? @relation(fields: [capabilityId], references: [id], onDelete: SetNull)
+
+  // Focused Capability / Deployment Proposal Fields
+  providedItems          String              @db.Text // What the company provides
+  technicalCapability    String              @db.Text // Technical capability
+  relevantProductService String?             @db.Text // Relevant product/service
+  previousDeployment     String?             @db.Text // Previous deployment
+  deploymentRequirements String?             @db.Text // Deployment requirements
+  expectedTimeline       String // Expected timeline (e.g. "4-6 Weeks")
+  estimatedCost          String? // Estimated cost / CSR commitment
+  expectedCivicImpact    String              @db.Text // Expected civic impact
+  status                 String              @default("SUBMITTED") // SUBMITTED, UNDER_REVIEW, ACCEPTED, DEPLOYED, DECLINED
+
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  @@index([problemId])
+  @@index([organizationId])
+  @@index([capabilityId])
+  @@index([status])
 }

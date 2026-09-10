@@ -106,11 +106,70 @@ export interface OrganizationInfo {
   id: string;
   name: string;
   type: OrganizationType;
+  regCode?: string | null;
   district?: string | null;
   state?: string | null;
   contactEmail?: string | null;
+  contactPhone?: string | null;
   domainTags?: string[];
   expertiseTags?: string[];
+  companyType?: string | null;
+  industryCategories?: string[];
+  certifications?: string[];
+  deploymentCapacity?: string | null;
+  locationsServed?: string[];
+  caseStudies?: string | null;
+}
+
+export type CapabilityType = "PRODUCT" | "SERVICE" | "EQUIPMENT_FACILITY" | "TECHNICAL_EXPERTISE";
+
+export interface IndustryCapability {
+  id: string;
+  organizationId: string;
+  type: CapabilityType;
+  title: string;
+  description: string;
+  category: string;
+  specifications?: any;
+  availability: string;
+  locationsServed: string[];
+  caseStudies?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  organization?: OrganizationInfo | null;
+  _count?: {
+    proposals?: number;
+  };
+}
+
+export interface IndustryDeploymentProposal {
+  id: string;
+  problemId: string;
+  organizationId: string;
+  capabilityId?: string | null;
+  providedItems: string;
+  technicalCapability: string;
+  relevantProductService?: string | null;
+  previousDeployment?: string | null;
+  deploymentRequirements?: string | null;
+  expectedTimeline: string;
+  estimatedCost?: string | null;
+  expectedCivicImpact: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  problem?: {
+    id: string;
+    title: string;
+    category?: string;
+    district?: string;
+    priorityTier?: PriorityTier;
+    priorityScore?: number;
+    status?: ProblemStatus;
+    verificationStatus?: VerificationStatus;
+  };
+  capability?: IndustryCapability | null;
+  organization?: OrganizationInfo | null;
 }
 
 export interface User {
