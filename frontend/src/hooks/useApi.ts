@@ -1,5 +1,5 @@
-import { useContext, useEffect, useState } from 'react';
-import { AuthContext } from '../context/AuthContext';
+import { useEffect, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 interface ApiResult<T> {
   data: T | null;
@@ -8,7 +8,7 @@ interface ApiResult<T> {
 }
 
 export function useApi<T>(url: string): ApiResult<T> {
-  const { token } = useContext(AuthContext) ?? {};
+  const { token } = useAuth() ?? {};
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
